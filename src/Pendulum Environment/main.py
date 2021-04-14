@@ -117,7 +117,7 @@ def angle_normalize(x):
 env = CustomPendulumEnv()
 # It will check your custom environment and output additional warnings if needed
 check_env(env)
-print("TEST COMMIT2")
+print("TEST COMMIT")
 
 # env.reset()
 # for i in range(200):
