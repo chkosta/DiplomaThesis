@@ -216,8 +216,9 @@ def angle_normalize(x):
 
 
 
-# Instantiate the env
+# Instantiate the simulated environment
 env = CustomPendulumEnv()
+# Instantiate the real environment
 env_test = TestPendulumEnv()
 # It will check your custom environment and output additional warnings if needed
 # check_env(env)
