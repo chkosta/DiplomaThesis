@@ -20,8 +20,8 @@ class CustomPendulumEnv(gym.Env):
         self.max_torque = 2.
         self.dt = .05
         self.g = g
-        self.m = np.array([0, 2])
-        self.l = np.array([0, 4])
+        self.m = np.array([0, 2])   # range of mass
+        self.l = np.array([0, 2])   # range of length
         self.viewer = None
         self._step = 0
 
@@ -70,7 +70,7 @@ class CustomPendulumEnv(gym.Env):
         high = np.array([np.pi, 1])
         self.state = self.np_random.uniform(low=-high, high=high)
         self.m = self.np_random.uniform(0, 2)
-        self.l = self.np_random.uniform(0, 4)
+        self.l = self.np_random.uniform(0, 2)
         # print(self.m)
         # print(self.l)
         self.last_u = None
@@ -127,6 +127,7 @@ class TestPendulumEnv(gym.Env):
         self.l = 1.
         self.viewer = None
         self._step = 0
+        self.b = 0.1    # damping parameter
 
         high = np.array([1., 1., self.max_speed], dtype=np.float32)
         self.action_space = spaces.Box(
@@ -153,12 +154,13 @@ class TestPendulumEnv(gym.Env):
         m = self.m
         l = self.l
         dt = self.dt
+        b = self.b
 
         u = np.clip(u, -self.max_torque, self.max_torque)[0]
         self.last_u = u  # for rendering
         costs = angle_normalize(th) ** 2 + .1 * thdot ** 2 + .001 * (u ** 2)
 
-        newthdot = thdot + (-3 * g / (2 * l) * np.sin(th + np.pi) + 3. / (m * l ** 2) * u) * dt
+        newthdot = thdot + (-3 * g / (2 * l) * np.sin(th + np.pi) + 3. / (m * l ** 2) * (u - b * thdot)) * dt
         newth = th + newthdot * dt
         newthdot = np.clip(newthdot, -self.max_speed, self.max_speed)
 
@@ -250,3 +252,4 @@ while True:
     action, _states = model.predict(obs)
     obs, rewards, dones, info = env_test.step(action)
     env_test.render()
+    print(action, rewards)
