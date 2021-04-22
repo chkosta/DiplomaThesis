@@ -20,8 +20,8 @@ class CustomPendulumEnv(gym.Env):
         self.max_torque = 2.
         self.dt = .05
         self.g = g
-        self.m = np.array([0, 2])   # range of mass
-        self.l = np.array([0, 2])   # range of length
+        # self.m = np.array([0.2, 2])       # mass range
+        # self.l = np.array([0.2, 2])       # length range
         self.viewer = None
         self._step = 0
 
@@ -69,8 +69,8 @@ class CustomPendulumEnv(gym.Env):
     def reset(self):
         high = np.array([np.pi, 1])
         self.state = self.np_random.uniform(low=-high, high=high)
-        self.m = self.np_random.uniform(0, 2)
-        self.l = self.np_random.uniform(0, 2)
+        self.m = self.np_random.uniform(0.7, 1.2)       # uniform sample from mass range
+        self.l = self.np_random.uniform(0.7, 1.2)       # uniform sample from length range
         # print(self.m)
         # print(self.l)
         self.last_u = None
@@ -81,35 +81,6 @@ class CustomPendulumEnv(gym.Env):
         theta, thetadot = self.state
         return np.array([np.cos(theta), np.sin(theta), thetadot])
 
-    def render(self, mode='human'):
-        if self.viewer is None:
-            from gym.envs.classic_control import rendering
-            self.viewer = rendering.Viewer(500, 500)
-            self.viewer.set_bounds(-2.2, 2.2, -2.2, 2.2)
-            rod = rendering.make_capsule(1, .2)
-            rod.set_color(.8, .3, .3)
-            self.pole_transform = rendering.Transform()
-            rod.add_attr(self.pole_transform)
-            self.viewer.add_geom(rod)
-            axle = rendering.make_circle(.05)
-            axle.set_color(0, 0, 0)
-            self.viewer.add_geom(axle)
-            fname = path.join(path.dirname(__file__), "assets/clockwise.png")
-            self.img = rendering.Image(fname, 1., 1.)
-            self.imgtrans = rendering.Transform()
-            self.img.add_attr(self.imgtrans)
-
-        self.viewer.add_onetime(self.img)
-        self.pole_transform.set_rotation(self.state[0] + np.pi / 2)
-        if self.last_u:
-            self.imgtrans.scale = (-self.last_u / 2, np.abs(self.last_u) / 2)
-
-        return self.viewer.render(return_rgb_array=mode == 'rgb_array')
-
-    def close(self):
-        if self.viewer:
-            self.viewer.close()
-            self.viewer = None
 
 
 class TestPendulumEnv(gym.Env):
@@ -127,7 +98,7 @@ class TestPendulumEnv(gym.Env):
         self.l = 1.
         self.viewer = None
         self._step = 0
-        self.b = 0.1    # damping parameter
+        self.b = 0.3        # damping parameter
 
         high = np.array([1., 1., self.max_speed], dtype=np.float32)
         self.action_space = spaces.Box(
@@ -160,7 +131,7 @@ class TestPendulumEnv(gym.Env):
         self.last_u = u  # for rendering
         costs = angle_normalize(th) ** 2 + .1 * thdot ** 2 + .001 * (u ** 2)
 
-        newthdot = thdot + (-3 * g / (2 * l) * np.sin(th + np.pi) + 3. / (m * l ** 2) * (u - b * thdot)) * dt
+        newthdot = thdot + (-3 * g / (2 * l) * np.sin(th + np.pi) + 3. / (m * l ** 2) * (u - b * thdot)) * dt       # add damping to angular velocity
         newth = th + newthdot * dt
         newthdot = np.clip(newthdot, -self.max_speed, self.max_speed)
 
@@ -222,6 +193,7 @@ def angle_normalize(x):
 env = CustomPendulumEnv()
 # Instantiate the real environment
 env_test = TestPendulumEnv()
+
 # It will check your custom environment and output additional warnings if needed
 # check_env(env)
 
