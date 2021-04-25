@@ -20,8 +20,6 @@ class CustomPendulumEnv(gym.Env):
         self.max_torque = 2.
         self.dt = .05
         self.g = g
-        # self.m = np.array([0.2, 2])       # mass range
-        # self.l = np.array([0.2, 2])       # length range
         self.viewer = None
         self._step = 0
 
@@ -98,7 +96,7 @@ class TestPendulumEnv(gym.Env):
         self.l = 1.
         self.viewer = None
         self._step = 0
-        self.b = 0.3        # damping parameter
+        self.b = 0.2        # damping parameter
 
         high = np.array([1., 1., self.max_speed], dtype=np.float32)
         self.action_space = spaces.Box(
