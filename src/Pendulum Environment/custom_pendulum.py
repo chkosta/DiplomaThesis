@@ -3,7 +3,7 @@ from gym import spaces
 from gym.utils import seeding
 from stable_baselines3 import TD3
 from stable_baselines3.common.env_checker import check_env
-from stable_baselines3.common.noise import NormalActionNoise, OrnsteinUhlenbeckActionNoise
+from stable_baselines3.common.noise import NormalActionNoise
 import numpy as np
 from os import path
 
@@ -117,14 +117,6 @@ def angle_normalize(x):
 env = CustomPendulumEnv()
 # It will check your custom environment and output additional warnings if needed
 # check_env(env)
-
-
-# env.reset()
-# for i in range(200):
-#     action = env.action_space.sample()
-#     obs, reward, done, info = env.step(action)
-#     # env.render()
-#     print(action, reward)
 
 
 # The noise objects for TD3

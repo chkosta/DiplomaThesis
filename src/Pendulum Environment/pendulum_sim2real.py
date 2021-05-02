@@ -1,11 +1,16 @@
+import os
+from os import path
 import gym
 from gym import spaces
 from gym.utils import seeding
+from matplotlib import pyplot as plt
 from stable_baselines3 import TD3
+from stable_baselines3.common.noise import NormalActionNoise
+from stable_baselines3.common.results_plotter import plot_results
+from stable_baselines3.common import results_plotter
+from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.env_checker import check_env
-from stable_baselines3.common.noise import NormalActionNoise, OrnsteinUhlenbeckActionNoise
 import numpy as np
-from os import path
 
 
 
@@ -187,21 +192,22 @@ def angle_normalize(x):
 
 
 
-# Instantiate the simulated environment
+
+# Create log dir
+log_dir = "./logs/"
+os.makedirs(log_dir, exist_ok=True)
+
+
+# Instantiate the simulated environment and wrap it
 env = CustomPendulumEnv()
-# Instantiate the real environment
+env = Monitor(env, log_dir)
+
+# Instantiate the real environment and wrap it
 env_test = TestPendulumEnv()
+env_test = Monitor(env_test, log_dir)
 
 # It will check your custom environment and output additional warnings if needed
 # check_env(env)
-
-
-# env.reset()
-# for i in range(200):
-#     action = env.action_space.sample()
-#     obs, reward, done, info = env.step(action)
-#     # env.render()
-#     print(action, reward)
 
 
 # The noise objects for TD3
@@ -209,17 +215,15 @@ n_actions = env.action_space.shape[-1]
 action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
 
 model = TD3("MlpPolicy", env, action_noise=action_noise, verbose=1)
-model.learn(total_timesteps=50000, log_interval=50)
+
+timesteps = int(50000)
+model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test, eval_freq=5000, n_eval_episodes=10, eval_log_path=log_dir)
+
 model.save("td3_pendulum")
+
 env = model.get_env()
 
-del model # remove to demonstrate saving and loading
 
-model = TD3.load("td3_pendulum")
-
-obs = env_test.reset()
-while True:
-    action, _states = model.predict(obs)
-    obs, rewards, dones, info = env_test.step(action)
-    env_test.render()
-    print(action, rewards)
+# Plot the results
+plot_results([log_dir], timesteps, results_plotter.X_TIMESTEPS, "TD3 Pendulum")
+plt.show()
