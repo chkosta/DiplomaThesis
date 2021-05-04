@@ -198,10 +198,8 @@ log_dir = "./logs/"
 os.makedirs(log_dir, exist_ok=True)
 
 
-# Instantiate the simulated environment and wrap it
+# Instantiate the simulated environment
 env = CustomPendulumEnv()
-env = Monitor(env, log_dir)
-
 # Instantiate the real environment and wrap it
 env_test = TestPendulumEnv()
 env_test = Monitor(env_test, log_dir)
@@ -217,11 +215,7 @@ action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n
 model = TD3("MlpPolicy", env, action_noise=action_noise, verbose=1)
 
 timesteps = int(50000)
-model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test, eval_freq=5000, n_eval_episodes=10, eval_log_path=log_dir)
-
-model.save("td3_pendulum")
-
-env = model.get_env()
+model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test, eval_freq=2000, n_eval_episodes=10, eval_log_path=log_dir)
 
 
 # Plot the results
