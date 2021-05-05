@@ -1,12 +1,14 @@
+import csv
 import os
 from os import path
 import gym
+import pandas as pd
 from gym import spaces
 from gym.utils import seeding
 from matplotlib import pyplot as plt
 from stable_baselines3 import TD3
 from stable_baselines3.common.noise import NormalActionNoise
-from stable_baselines3.common.results_plotter import plot_results
+from stable_baselines3.common.results_plotter import plot_results, ts2xy
 from stable_baselines3.common import results_plotter
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.env_checker import check_env
@@ -193,16 +195,19 @@ def angle_normalize(x):
 
 
 
-# Create log dir
-log_dir = "./logs/"
-os.makedirs(log_dir, exist_ok=True)
+# Create log directories
+log_dir1 = "./logs/logs1/"
+os.makedirs(log_dir1, exist_ok=True)
+log_dir2 = "./logs/logs2/"
+os.makedirs(log_dir2, exist_ok=True)
 
 
 # Instantiate the simulated environment
 env = CustomPendulumEnv()
 # Instantiate the real environment and wrap it
 env_test = TestPendulumEnv()
-env_test = Monitor(env_test, log_dir)
+env_test1 = Monitor(env_test, log_dir1)
+env_test2 = Monitor(env_test, log_dir2)
 
 # It will check your custom environment and output additional warnings if needed
 # check_env(env)
@@ -215,9 +220,20 @@ action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n
 model = TD3("MlpPolicy", env, action_noise=action_noise, verbose=1)
 
 timesteps = int(50000)
-model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test, eval_freq=2000, n_eval_episodes=10, eval_log_path=log_dir)
+model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test1, eval_freq=2000, n_eval_episodes=10, eval_log_path=log_dir1)
+model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test2, eval_freq=50000, n_eval_episodes=10, eval_log_path=log_dir2)
+
 
 
 # Plot the results
-plot_results([log_dir], timesteps, results_plotter.X_TIMESTEPS, "TD3 Pendulum")
+plot_results([log_dir1], timesteps, results_plotter.X_TIMESTEPS, "TD3 Pendulum")
+plt.show()
+
+
+# Get all the episode rewards
+ep_rewards = env_test2.get_episode_rewards()
+
+# Boxplot
+fig = plt.figure()
+plt.boxplot(ep_rewards)
 plt.show()
