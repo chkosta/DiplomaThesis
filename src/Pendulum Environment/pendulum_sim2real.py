@@ -1,4 +1,3 @@
-import csv
 import os
 from os import path
 import gym
