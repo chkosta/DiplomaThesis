@@ -7,7 +7,7 @@ from gym.utils import seeding
 from matplotlib import pyplot as plt
 from stable_baselines3 import TD3
 from stable_baselines3.common.noise import NormalActionNoise
-from stable_baselines3.common.results_plotter import plot_results, ts2xy
+from stable_baselines3.common.results_plotter import plot_results
 from stable_baselines3.common import results_plotter
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.env_checker import check_env
@@ -193,7 +193,6 @@ def angle_normalize(x):
 
 
 
-
 # Create log directories
 log_dir1 = "./logs/logs1/"
 os.makedirs(log_dir1, exist_ok=True)
@@ -219,12 +218,15 @@ action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n
 model = TD3("MlpPolicy", env, action_noise=action_noise, verbose=1)
 
 timesteps = int(50000)
+# For every 10 episodes of learning, test to the real environment
 model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test1, eval_freq=2000, n_eval_episodes=10, eval_log_path=log_dir1)
+
+# After 50000 steps of learning, test to the real environment
 model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test2, eval_freq=50000, n_eval_episodes=10, eval_log_path=log_dir2)
 
 
 
-# Plot the results
+# Plot the results with the first type of learning/testing
 plot_results([log_dir1], timesteps, results_plotter.X_TIMESTEPS, "TD3 Pendulum")
 plt.show()
 
@@ -232,7 +234,9 @@ plt.show()
 # Get all the episode rewards
 ep_rewards = env_test2.get_episode_rewards()
 
-# Boxplot
-fig = plt.figure()
+# Boxplot with the second type of learning/testing
 plt.boxplot(ep_rewards)
+plt.title("Pendulum")
+plt.xlabel('TD3')
+plt.ylabel('Episode Rewards')
 plt.show()
