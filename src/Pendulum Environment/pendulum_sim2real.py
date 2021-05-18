@@ -1,14 +1,12 @@
+import csv
 import os
 from os import path
 import gym
-import pandas as pd
 from gym import spaces
 from gym.utils import seeding
 from matplotlib import pyplot as plt
 from stable_baselines3 import TD3
 from stable_baselines3.common.noise import NormalActionNoise
-from stable_baselines3.common.results_plotter import plot_results
-from stable_baselines3.common import results_plotter
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.env_checker import check_env
 import numpy as np
@@ -32,7 +30,8 @@ class CustomPendulumEnv(gym.Env):
         high = np.array([1., 1., self.max_speed], dtype=np.float32)
         self.action_space = spaces.Box(
             low=-self.max_torque,
-            high=self.max_torque, shape=(1,),
+            high=self.max_torque,
+            shape=(1,),
             dtype=np.float32
         )
         self.observation_space = spaces.Box(
@@ -68,20 +67,18 @@ class CustomPendulumEnv(gym.Env):
         done = False
         if self._step >= 200:
             done = True
-        return self._get_obs(), -costs, done, {}
+        return self.get_obs(), -costs, done, {}
 
     def reset(self):
         high = np.array([np.pi, 1])
         self.state = self.np_random.uniform(low=-high, high=high)
         self.m = self.np_random.uniform(0.7, 1.2)       # uniform sample from mass range
         self.l = self.np_random.uniform(0.7, 1.2)       # uniform sample from length range
-        # print(self.m)
-        # print(self.l)
         self.last_u = None
         self._step = 0
-        return self._get_obs()
+        return self.get_obs()
 
-    def _get_obs(self):
+    def get_obs(self):
         theta, thetadot = self.state
         return np.array([np.cos(theta), np.sin(theta), thetadot])
 
@@ -144,16 +141,16 @@ class TestPendulumEnv(gym.Env):
         done = False
         if self._step >= 200:
             done = True
-        return self._get_obs(), -costs, done, {}
+        return self.get_obs(), -costs, done, {}
 
     def reset(self):
         high = np.array([np.pi, 1])
         self.state = self.np_random.uniform(low=-high, high=high)
         self.last_u = None
         self._step = 0
-        return self._get_obs()
+        return self.get_obs()
 
-    def _get_obs(self):
+    def get_obs(self):
         theta, thetadot = self.state
         return np.array([np.cos(theta), np.sin(theta), thetadot])
 
@@ -199,44 +196,73 @@ os.makedirs(log_dir1, exist_ok=True)
 log_dir2 = "./logs/logs2/"
 os.makedirs(log_dir2, exist_ok=True)
 
+reward_list = []
+tmps_list = []
 
-# Instantiate the simulated environment
-env = CustomPendulumEnv()
-# Instantiate the real environment and wrap it
-env_test = TestPendulumEnv()
-env_test1 = Monitor(env_test, log_dir1)
-env_test2 = Monitor(env_test, log_dir2)
+# Run 10 times
+for i in range(10):
 
-# It will check your custom environment and output additional warnings if needed
-# check_env(env)
+    # Instantiate the simulated environment
+    env = CustomPendulumEnv()
+    # Instantiate the real environment and wrap it
+    env_test = TestPendulumEnv()
+    env_test1 = Monitor(env_test, log_dir1)
+    env_test2 = Monitor(env_test, log_dir2)
 
-
-# The noise objects for TD3
-n_actions = env.action_space.shape[-1]
-action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
-
-model = TD3("MlpPolicy", env, action_noise=action_noise, verbose=1)
-
-timesteps = int(50000)
-# For every 10 episodes of learning, test to the real environment
-model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test1, eval_freq=2000, n_eval_episodes=10, eval_log_path=log_dir1)
-
-# After 50000 steps of learning, test to the real environment
-model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test2, eval_freq=50000, n_eval_episodes=10, eval_log_path=log_dir2)
+    # Check for warnings
+    # check_env(env)
 
 
+    # The noise objects for TD3
+    n_actions = env.action_space.shape[-1]
+    action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
 
-# Plot the results with the first type of learning/testing
-plot_results([log_dir1], timesteps, results_plotter.X_TIMESTEPS, "TD3 Pendulum")
-plt.show()
+    model = TD3("MlpPolicy", env, action_noise=action_noise, verbose=1)
 
+    timesteps = int(50000)
 
-# Get all the episode rewards
-ep_rewards = env_test2.get_episode_rewards()
+    # For every 10 episodes of learning, test to the real environment
+    # model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test1, eval_freq=2000, n_eval_episodes=1, eval_log_path=log_dir1)
+
+    # After 50000 steps of learning, test to the real environment
+    model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test2, eval_freq=50000, n_eval_episodes=10, eval_log_path=log_dir2)
+
+    # Dataframe split to get only the important data (rewards, timesteps)
+    df = open("./logs/logs2/monitor.csv")
+    csv_df = csv.reader(df)
+    next(csv_df)
+    next(csv_df)
+    reward = []
+    tmps = []
+    for row in csv_df:
+        reward.append(float(row[0]))
+        tmps.append(float(row[2]))
+
+    # Calculate mean episode rewards (for boxplotting)
+    reward = [np.mean(reward)]
+    # Calculate mean episode timesteps (for boxplotting)
+    tmps = [np.mean(tmps)]
+
+    reward_list.append(reward)
+    tmps_list.append(tmps)
+    print(reward_list)
+
+# # Calculate mean curve
+# x_mean = np.mean(tmps_list, axis=0)
+# y_mean = np.mean(reward_list, axis=0)
+#
+#
+#
+# # Plot the results with the first type of learning/testing
+# plt.plot(x_mean, y_mean)
+# plt.title("TD3 Pendulum")
+# plt.xlabel("Timesteps")
+# plt.ylabel("Episode Rewards")
+# plt.show()
 
 # Boxplot with the second type of learning/testing
-plt.boxplot(ep_rewards)
-plt.title("Pendulum")
-plt.xlabel('TD3')
-plt.ylabel('Episode Rewards')
+plt.boxplot(reward_list)
+plt.title("TD3 Pendulum")
+plt.xlabel("Experiment No.")
+plt.ylabel("Mean Episode Rewards")
 plt.show()
