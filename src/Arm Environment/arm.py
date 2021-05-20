@@ -17,56 +17,76 @@ class CustomArmEnv(gym.Env):
         # RobotDART initialization data
         self.simu = rd.RobotDARTSimu(0.001)
         self.robot = rd.Robot("arm.urdf")
-        self.simu.add_robot(self.robot)
+        self.robot.set_actuator_types("servo")  # Control each joint by giving velocity commands
         self.robot.fix_to_world()
+        self.simu.add_robot(self.robot)
         self.simu.add_floor()
+        self.simulation_time = 5.0  # Run simulation for 5 sec
 
         # Rest initialization data
         self._step = 0
-        self.min_action = -20.
-        self.max_action = 20.
-        self.max_theta1 = np.radians(180) # 3.1416
-        self.max_theta_rest = np.radians(90) # 1.5708
+        self.max_velocity = 5.
+        self.max_theta1 = np.radians(180)   # 3.1416
+        self.max_theta_rest = np.radians(90)    # 1.5708
 
         # Spaces
-        high = np.array([self.max_theta1, self.max_theta_rest, self.max_theta_rest, self.max_theta_rest], dtype=np.float32)
+        action_high = np.array([self.max_velocity, self.max_velocity, self.max_velocity, self.max_velocity], dtype=np.float32)
+        obs_high = np.array([self.max_theta1, self.max_theta_rest, self.max_theta_rest, self.max_theta_rest], dtype=np.float32)
         self.action_space = spaces.Box(
-            low=self.min_action,
-            high=self.max_action,
-            shape=(1,),
+            low=-action_high,
+            high=action_high,
+            shape=(4,),
             dtype=np.float32
         )
         self.observation_space = spaces.Box(
-            low=-high,
-            high=high,
+            low=-obs_high,
+            high=obs_high,
             shape=(4,),
             dtype=np.float32
         )
 
         self.seed()
 
-    def step(self, action):
-
+    def step(self, cmd):
         # Target joint positions
         target_pos = [0., 1.57, -0.5, 0.7]
 
-        # Create PD controller to control the arm
-        self.control = rd.PDControl(target_pos, False)
+        cmd = np.clip(cmd, -self.max_velocity, self.max_velocity)
+        self.robot.set_commands(cmd)
 
-        # Add it to the robot
-        self.robot.add_controller(self.control, 1.)
-        self.control.set_pd(action, 0.)
+        # Run simulation
+        while self.simu.scheduler().next_time() < self.simulation_time:
+            current_pos = np.round(self.robot.positions(), 2)
+            if (current_pos[0] == target_pos[0]):
+                cmd[0] = 0
+                self.robot.set_commands(cmd)
+
+            if (current_pos[1] == target_pos[1]):
+                cmd[1] = 0
+                self.robot.set_commands(cmd)
+
+            if (current_pos[2] == target_pos[2]):
+                cmd[2] = 0
+                self.robot.set_commands(cmd)
+
+            if (current_pos[3] == target_pos[3]):
+                cmd[3] = 0
+                self.robot.set_commands(cmd)
+
+            if (self.simu.step_world()):
+                break
+
 
         # Calculate reward
-        current_pos = self.robot.positions()
-        costs = euclidean(current_pos, target_pos)
+        final_pos = np.round(self.robot.positions(), 2)
+        costs = euclidean(final_pos, target_pos)
         reward = -costs
 
-        self.state = current_pos
+        self.state = final_pos
 
         self._step += 1
         done = False
-        if self._step >= 100:
+        if self._step >= 200:
             done = True
 
         return self.state, reward, done, {}
@@ -101,4 +121,4 @@ n_actions = env.action_space.shape[-1]
 action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
 
 model = TD3("MlpPolicy", env, action_noise=action_noise, verbose=1)
-model.learn(total_timesteps=20000, log_interval=50)
+model.learn(total_timesteps=50000, log_interval=50)
