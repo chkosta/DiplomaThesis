@@ -189,6 +189,24 @@ def angle_normalize(x):
     return (((x+np.pi) % (2*np.pi)) - np.pi)
 
 
+def load(dir):
+    df = open(dir)
+    csv_df = csv.reader(df)
+    next(csv_df)
+    next(csv_df)
+    reward = []
+    for row in csv_df:
+        reward.append(float(row[0]))
+
+    if dir == "./logs/logs2/monitor.csv":
+        # Calculate median rewards (for boxplotting)
+        reward = np.median(reward)
+
+    reward_list.append(reward)
+
+    print(reward_list)
+
+
 
 # Create log directories
 log_dir1 = "./logs/logs1/"
@@ -196,11 +214,11 @@ os.makedirs(log_dir1, exist_ok=True)
 log_dir2 = "./logs/logs2/"
 os.makedirs(log_dir2, exist_ok=True)
 
-reward_list = []
-tmps_list = []
 
-# Run 10 times
-for i in range(10):
+reward_list = []
+
+# Run 20 times
+for i in range(20):
 
     # Instantiate the simulated environment
     env = CustomPendulumEnv()
@@ -222,47 +240,40 @@ for i in range(10):
     timesteps = int(50000)
 
     # For every 10 episodes of learning, test to the real environment
-    # model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test1, eval_freq=2000, n_eval_episodes=1, eval_log_path=log_dir1)
+    model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test1, eval_freq=2000, n_eval_episodes=1, eval_log_path=log_dir1)
 
     # After 50000 steps of learning, test to the real environment
-    model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test2, eval_freq=50000, n_eval_episodes=10, eval_log_path=log_dir2)
+    # model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test2, eval_freq=2000, n_eval_episodes=10, eval_log_path=log_dir2)
 
-    # Dataframe split to get only the important data (rewards, timesteps)
-    df = open("./logs/logs2/monitor.csv")
-    csv_df = csv.reader(df)
-    next(csv_df)
-    next(csv_df)
-    reward = []
-    tmps = []
-    for row in csv_df:
-        reward.append(float(row[0]))
-        tmps.append(float(row[2]))
+    # Dataframe split to get only the important data (rewards)
+    dir = "./logs/logs1/monitor.csv"
+    # dir = "./logs/logs2/monitor.csv"
+    df = load(dir)
 
-    # Calculate mean episode rewards (for boxplotting)
-    reward = [np.mean(reward)]
-    # Calculate mean episode timesteps (for boxplotting)
-    tmps = [np.mean(tmps)]
 
-    reward_list.append(reward)
-    tmps_list.append(tmps)
-    print(reward_list)
 
-# # Calculate mean curve
-# x_mean = np.mean(tmps_list, axis=0)
-# y_mean = np.mean(reward_list, axis=0)
-#
-#
-#
-# # Plot the results with the first type of learning/testing
-# plt.plot(x_mean, y_mean)
-# plt.title("TD3 Pendulum")
-# plt.xlabel("Timesteps")
-# plt.ylabel("Episode Rewards")
-# plt.show()
+if dir == "./logs/logs1/monitor.csv":
+    # Plot the results using the first type of learning/testing
+    # Compute the median and 25/75 percentiles
+    rwd_med_list = np.median(reward_list, axis=0)
+    rwd_perc_25 = np.percentile(reward_list, 25, axis=0)
+    rwd_perc_75 = np.percentile(reward_list, 75, axis=0)
 
-# Boxplot with the second type of learning/testing
-plt.boxplot(reward_list)
-plt.title("TD3 Pendulum")
-plt.xlabel("Experiment No.")
-plt.ylabel("Mean Episode Rewards")
-plt.show()
+    # Timesteps list
+    tmps_list = list(range(2000, 52000, 2000))
+
+    plt.fill_between(tmps_list, rwd_perc_25, rwd_perc_75, alpha=0.25, linewidth=2, color='#006BB2')
+
+    plt.plot(tmps_list, rwd_med_list)
+    plt.title("TD3 Pendulum")
+    plt.xlabel("Timesteps")
+    plt.ylabel("Median Rewards")
+    plt.show()
+
+else:
+    # Boxplot the results using the second type of learning/testing
+    plt.boxplot(reward_list)
+    plt.title("TD3 Pendulum")
+    plt.xlabel("Box No.")
+    plt.ylabel("Median Rewards")
+    plt.show()
