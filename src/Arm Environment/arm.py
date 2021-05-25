@@ -21,7 +21,6 @@ class CustomArmEnv(gym.Env):
         self.robot.fix_to_world()
         self.simu.add_robot(self.robot)
         self.simu.add_floor()
-        self.simulation_time = 5.0  # Run simulation for 5 sec
 
         # Rest initialization data
         self._step = 0
@@ -54,35 +53,15 @@ class CustomArmEnv(gym.Env):
         cmd = np.clip(cmd, -self.max_velocity, self.max_velocity)
         self.robot.set_commands(cmd)
 
-        # Run simulation
-        while self.simu.scheduler().next_time() < self.simulation_time:
-            current_pos = np.round(self.robot.positions(), 2)
-            if (current_pos[0] == target_pos[0]):
-                cmd[0] = 0
-                self.robot.set_commands(cmd)
-
-            if (current_pos[1] == target_pos[1]):
-                cmd[1] = 0
-                self.robot.set_commands(cmd)
-
-            if (current_pos[2] == target_pos[2]):
-                cmd[2] = 0
-                self.robot.set_commands(cmd)
-
-            if (current_pos[3] == target_pos[3]):
-                cmd[3] = 0
-                self.robot.set_commands(cmd)
-
-            if (self.simu.step_world()):
-                break
-
+        # Run one simulated step
+        self.simu.step_world()
 
         # Calculate reward
-        final_pos = np.round(self.robot.positions(), 2)
-        costs = euclidean(final_pos, target_pos)
+        current_pos = np.round(self.robot.positions(), 2)
+        costs = euclidean(current_pos, target_pos)
         reward = -costs
 
-        self.state = final_pos
+        self.state = current_pos
 
         self._step += 1
         done = False
