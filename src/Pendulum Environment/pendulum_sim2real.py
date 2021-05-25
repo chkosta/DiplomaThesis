@@ -243,7 +243,7 @@ for i in range(20):
     model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test1, eval_freq=2000, n_eval_episodes=1, eval_log_path=log_dir1)
 
     # After 50000 steps of learning, test to the real environment
-    # model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test2, eval_freq=2000, n_eval_episodes=10, eval_log_path=log_dir2)
+    # model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test2, eval_freq=50000, n_eval_episodes=10, eval_log_path=log_dir2)
 
     # Dataframe split to get only the important data (rewards)
     dir = "./logs/logs1/monitor.csv"
