@@ -70,8 +70,8 @@ class RandomizedPendulumEnv(gym.Env):
     def reset(self):
         high = np.array([np.pi, 1])
         self.state = self.np_random.uniform(low=-high, high=high)
-        self.m = self.np_random.uniform(0.7, 1.2)       # uniform sample from mass range
-        self.l = self.np_random.uniform(0.7, 1.2)       # uniform sample from length range
+        self.m = self.np_random.uniform(0.7, 1.3)       # uniform sample from mass range
+        self.l = self.np_random.uniform(0.7, 1.3)       # uniform sample from length range
         self._step = 0
         return self.get_obs()
 
@@ -92,8 +92,8 @@ class NonRandomizedPendulumEnv(gym.Env):
         self.dt = .05
         self.g = g
         # Fixed mass, length values
-        self.m = 1.2
-        self.l = 1.2
+        self.m = 1.3
+        self.l = 1.3
         self._step = 0
 
         high = np.array([1., 1., self.max_speed], dtype=np.float32)
@@ -138,8 +138,8 @@ class NonRandomizedPendulumEnv(gym.Env):
         return self.get_obs(), -costs, done, {}
 
     def reset(self):
-        # Fixed state values
-        self.state = np.array([0., 0.])
+        high = np.array([np.pi, 1])
+        self.state = self.np_random.uniform(low=-high, high=high)
         self._step = 0
         return self.get_obs()
 
@@ -306,7 +306,7 @@ for i in range(20):
     non_randomized_model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test2, eval_freq=2000, n_eval_episodes=1, eval_log_path=log_non_randomized)
 
     # After 50000 steps of learning, test to the real environment
-    # model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test3, eval_freq=4000, n_eval_episodes=10, eval_log_path=log_dir)
+    # model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test3, eval_freq=50000, n_eval_episodes=10, eval_log_path=log_dir)
 
 
     # Dataframe split to get only the important data (rewards)
