@@ -105,8 +105,8 @@ class RandomizedArmEnv(gym.Env):
         return pos
 
     def generate_random_mass(self):
-        mass_low = np.array([0.1, 0.1, 0.1, 0.1])
-        mass_high = np.array([0.7, 0.7, 0.7, 0.7])
+        mass_low = np.array([0.10, 0.10, 0.10, 0.10])
+        mass_high = np.array([0.60, 0.70, 0.63, 0.57])
         mass = self.np_random.uniform(low=mass_low, high=mass_high)
         return mass
 
@@ -128,10 +128,10 @@ class NonRandomizedArmEnv(gym.Env):
         self.simu.add_floor()
 
         # Set link's masses
-        self.robot.set_body_mass("arm_link_1", 0.7)        # 0.19
-        self.robot.set_body_mass("arm_link_2", 0.7)        # 0.29
-        self.robot.set_body_mass("arm_link_3", 0.7)        # 0.22
-        self.robot.set_body_mass("arm_link_4", 0.7)        # 0.16
+        self.robot.set_body_mass("arm_link_1", 0.59)        # 0.19
+        self.robot.set_body_mass("arm_link_2", 0.69)        # 0.29
+        self.robot.set_body_mass("arm_link_3", 0.62)        # 0.22
+        self.robot.set_body_mass("arm_link_4", 0.56)        # 0.16
 
         # Rest initialization data
         self._step = 0
