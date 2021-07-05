@@ -305,17 +305,27 @@ def load(dir):
     reward = []
     reward_non = []
 
-    if dir == "./logs/Randomized/monitor.csv":
+    if dir == "./logs/logs1/Randomized/monitor.csv":
         for row in csv_df:
             reward.append(float(row[0]))
         reward_list.append(reward)
         print(reward_list)
 
-    if dir == "./logs/NonRandomized/monitor.csv":
+    if dir == "./logs/logs1/NonRandomized/monitor.csv":
         for row in csv_df:
             reward_non.append(float(row[0]))
         reward_list_non.append(reward_non)
         print(reward_list_non)
+
+    if dir == "./logs/logs2/monitor.csv":
+        for row in csv_df:
+            reward.append(float(row[0]))
+
+        # Calculate median rewards (for boxplotting)
+        reward = np.median(reward)
+
+        reward_list.append(reward)
+        print(reward_list)
 
 
 def perc(reward_list):
@@ -327,10 +337,12 @@ def perc(reward_list):
 
 
 # Create log directories
-log_randomized = "./logs/Randomized/"
+log_randomized = "./logs/logs1/Randomized/"
 os.makedirs(log_randomized, exist_ok=True)
-log_non_randomized = "./logs/NonRandomized/"
+log_non_randomized = "./logs/logs1/NonRandomized/"
 os.makedirs(log_non_randomized, exist_ok=True)
+# log_dir = "./logs/logs2/"
+# os.makedirs(log_dir, exist_ok=True)
 
 
 reward_list = []
@@ -348,6 +360,7 @@ for i in range(20):
     env_test = TestArmEnv()
     env_test1 = Monitor(env_test, log_randomized)
     env_test2 = Monitor(env_test, log_non_randomized)
+    # env_test3 = Monitor(env_test, log_dir)
 
     # Check for warnings
     # check_env(env)
@@ -359,6 +372,7 @@ for i in range(20):
 
     randomized_model = TD3("MlpPolicy", randomized_env, action_noise=action_noise, verbose=1)
     non_randomized_model = TD3("MlpPolicy", non_randomized_env, action_noise=action_noise, verbose=1)
+    # model = TD3("MlpPolicy", randomized_env, action_noise=action_noise, verbose=1)
 
     timesteps = int(50000)
 
@@ -368,32 +382,48 @@ for i in range(20):
     # For every 10 episodes of learning, test to the real environment (without domain randomization)
     non_randomized_model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test2, eval_freq=2000, n_eval_episodes=1, eval_log_path=log_non_randomized)
 
+    # After 50000 steps of learning, test to the real environment
+    # model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test3, eval_freq=50000, n_eval_episodes=10, eval_log_path=log_dir)
+
 
     # Dataframe split to get only the important data (rewards)
-    dir_randomized = "./logs/Randomized/monitor.csv"
+    choice = 1
+    dir_randomized = "./logs/logs1/Randomized/monitor.csv"
     load(dir_randomized)
-    dir_non_randomized = "./logs/NonRandomized/monitor.csv"
+    dir_non_randomized = "./logs/logs1/NonRandomized/monitor.csv"
     load(dir_non_randomized)
 
+    # choice = 2
+    # dir = "./logs/logs2/monitor.csv"
+    # load(dir)
 
 
-# Plot the results using the first type of learning/testing
-# Compute the median and 25/75 percentiles with domain randomization
-rwd_med_list, rwd_perc_25, rwd_perc_75 = perc(reward_list)
+if choice == 1:
+    # Plot the results using the first type of learning/testing
+    # Compute the median and 25/75 percentiles with domain randomization
+    rwd_med_list, rwd_perc_25, rwd_perc_75 = perc(reward_list)
 
-# Compute the median and 25/75 percentiles without domain randomization
-rwd_med_list_non, rwd_perc_25_non, rwd_perc_75_non = perc(reward_list_non)
+    # Compute the median and 25/75 percentiles without domain randomization
+    rwd_med_list_non, rwd_perc_25_non, rwd_perc_75_non = perc(reward_list_non)
 
-# Timesteps list
-tmps_list = list(range(2000, timesteps + 2000, 2000))
+    # Timesteps list
+    tmps_list = list(range(2000, timesteps + 2000, 2000))
 
-plt.fill_between(tmps_list, rwd_perc_25, rwd_perc_75, alpha=0.25, linewidth=2, color='#006BB2')
-plt.fill_between(tmps_list, rwd_perc_25_non, rwd_perc_75_non, alpha=0.25, linewidth=2, color='#B22400')
+    plt.fill_between(tmps_list, rwd_perc_25, rwd_perc_75, alpha=0.25, linewidth=2, color='#006BB2')
+    plt.fill_between(tmps_list, rwd_perc_25_non, rwd_perc_75_non, alpha=0.25, linewidth=2, color='#B22400')
 
-plt.plot(tmps_list, rwd_med_list)
-plt.plot(tmps_list, rwd_med_list_non)
-plt.legend(["Domain Randomization", "No Domain Randomization"])
-plt.title("TD3 Arm")
-plt.xlabel("Timesteps")
-plt.ylabel("Median Rewards")
-plt.show()
+    plt.plot(tmps_list, rwd_med_list)
+    plt.plot(tmps_list, rwd_med_list_non)
+    plt.legend(["Domain Randomization", "No Domain Randomization"])
+    plt.title("TD3 Arm")
+    plt.xlabel("Timesteps")
+    plt.ylabel("Median Rewards")
+    plt.show()
+
+else:
+    # Boxplot the results using the second type of learning/testing
+    plt.boxplot(reward_list)
+    plt.title("TD3 Arm")
+    plt.xlabel("Box No.")
+    plt.ylabel("Median Rewards")
+    plt.show()
