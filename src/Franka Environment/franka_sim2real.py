@@ -5,6 +5,7 @@ import numpy as np
 from gym import spaces
 from gym.utils import seeding
 from matplotlib import pyplot as plt
+from scipy.spatial.distance import euclidean
 from stable_baselines3 import TD3
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.monitor import Monitor
@@ -56,24 +57,28 @@ class FrankaEnv(gym.Env):
         # Rest initialization data
         self._step = 0
 
-        self.min_velocity = -1.
-        self.max_velocity = 1.
-        self.min_theta = -1.
-        self.max_theta = 1.
+        self.min_velocity = -2.
+        self.max_velocity = 2.
+        self.min_finger_velocity = -0.2
+        self.max_finger_velocity = 0.2
+        self.min_theta_x = -0.855
+        self.max_theta_x = 0.855
+        self.min_theta_y = -0.36
+        self.max_theta_y = 1.19
+        self.min_theta_z = -0.855
+        self.max_theta_z = 0.855
 
         # Spaces
-        action_low = np.array([self.min_velocity, self.min_velocity, self.min_velocity, self.min_velocity, self.min_velocity, self.min_velocity], dtype=np.float32)
-        action_high = np.array([self.max_velocity, self.max_velocity, self.max_velocity, self.max_velocity, self.max_velocity, self.max_velocity], dtype=np.float32)
+        action_low = np.array([self.min_velocity, self.min_velocity, self.min_velocity, self.min_finger_velocity], dtype=np.float32)
+        action_high = np.array([self.max_velocity, self.max_velocity, self.max_velocity, self.max_finger_velocity], dtype=np.float32)
 
-        obs_low = np.array([self.min_theta, self.min_theta, self.min_theta,
-                            self.min_velocity, self.min_velocity, self.min_velocity, self.min_velocity, self.min_velocity, self.min_velocity], dtype=np.float32)
-        obs_high = np.array([self.max_theta, self.max_theta, self.max_theta,
-                             self.max_velocity, self.max_velocity, self.max_velocity, self.max_velocity, self.max_velocity, self.max_velocity], dtype=np.float32)
+        obs_low = np.array([[self.min_theta_x, self.min_theta_y, self.min_theta_z], [self.min_velocity, self.min_velocity, self.min_velocity]], dtype=np.float32)
+        obs_high = np.array([[self.max_theta_x, self.max_theta_y, self.max_theta_z], [self.max_velocity, self.max_velocity, self.max_velocity]], dtype=np.float32)
 
         self.action_space = spaces.Box(
             low=action_low,
             high=action_high,
-            shape=(6,),
+            shape=(4,),
             dtype=np.float32
         )
         self.observation_space = spaces.Box(
@@ -84,85 +89,63 @@ class FrankaEnv(gym.Env):
 
         self.seed()
 
-    def step(self, vel):
+    def step(self, vel2):
 
         # At each step get the end effector pose
         current_eef_pose = self.robot.body_pose(self.eef_link_name)
 
-        # Calculate error between current and target end effector pose
-        current_error = error(current_eef_pose, self.target_eef_pose)
+        # Gripper open (negative velocities) or close (positive velocities)
+        gripper_vel = vel2[3]
 
-        # Actions
-        # If moving and we've gotten close enough
-        if self.action % 2 == 1 and current_error < self.threshold_error[self.action]:
-            # Stop moving and proceed to the next action
-            self.robot.reset_commands()
-            self.action += 1
+        vel1 = self.controller.update(current_eef_pose)
+        vel = [vel1[0], vel1[1], vel1[2], vel2[0], vel2[1], vel2[2]]
+        jac = self.robot.jacobian(self.eef_link_name)
+        jac_pinv = damped_pseudoinverse(jac)
+        cmd = jac_pinv @ vel
+        cmd[7] = gripper_vel
 
-        # If still moving and not close enough
-        if self.action % 2 == 1 and current_error >= self.threshold_error[self.action]:
-            # Keep moving until we reach the threshold error
-            jac = self.robot.jacobian(self.eef_link_name)
-            jac_pinv = damped_pseudoinverse(jac)
-            cmd = jac_pinv @ vel
-
-            self.robot.set_commands(cmd)
-
-        elif self.action == 0:
-            # Go above the cube
-            box_translation_vector = np.zeros(3)
-            for i in range(3):
-                box_translation_vector[i] = self.box_body_pose.matrix()[i][3]
-
-            # Set the distance between eef-cube
-            self.target_eef_pose = create_target_pose(self.robot, self.eef_link_name, [0, 0, 0.25], box_translation_vector)
-            self.controller.set_target(self.target_eef_pose)
-
-            # Go above the cube in the next step
-            self.action = 1
-
-        elif self.action == 2:
-            # Approach the cube
-            box_translation_vector = np.zeros(3)
-            for i in range(3):
-                box_translation_vector[i] = self.box_body_pose.matrix()[i][3]
-
-            # Set the distance between eef-cube (after approaching)
-            self.target_eef_pose = create_target_pose(self.robot, self.eef_link_name, [0, 0, 0.095], box_translation_vector)
-            self.controller.set_target(self.target_eef_pose)
-
-            # Approach the cube in the next step
-            self.action = 3
-
-        elif self.action == 4:
-            # Close fingers to grab the cube and raise it
-            positions = self.robot.positions()
-
-            positions[7] = 0.03
-            positions[8] = 0.03
-            self.robot.set_positions(positions)
-
-            # Set the height of raising
-            self.target_eef_pose = create_target_pose(self.robot, self.eef_link_name, [0, 0, 0.25], None)
-            self.controller.set_target(self.target_eef_pose)
-
-            # Raise the cube in the next step
-            self.action = 5
-
-
-        current_eef_pos = self.target_eef_pose.translation()
-        current_eef_vel = self.robot.body_velocity(self.eef_link_name)
-
-        # Calculate reward
-        costs = current_error
-        reward = -costs
-
-        self.state = np.array([current_eef_pos[0], current_eef_pos[1], current_eef_pos[2],
-                               current_eef_vel[0], current_eef_vel[1], current_eef_vel[2], current_eef_vel[3], current_eef_vel[4], current_eef_vel[5]])
+        self.robot.set_commands(cmd)
 
         for i in range(20):
             # Run one simulated step
             self.simu.step_world()
+
+
+        current_eef_pos = current_eef_pose.translation()
+        current_eef_vel = self.robot.body_velocity(self.eef_link_name)
+        current_eef_vel = [current_eef_vel[3], current_eef_vel[4], current_eef_vel[5]]
+
+        self.state = np.array([current_eef_pos, current_eef_vel])
+
+
+        # Reward function
+        current_box_pos = self.box_body_pose.translation()
+        dist = euclidean(current_eef_pos, current_box_pos)
+        reaching_reward = dist
+
+        # Two phases of the task
+        # 0: Reaching the box
+        # 1: Grasping the box and lifting it up
+        if self.phase == 0:
+            reward = reaching_reward
+
+            # Gripper open reward
+            if gripper_vel < 0:
+                reward += abs(gripper_vel)
+
+            if dist < 0.025:
+                self.phase = 1
+
+        elif self.phase == 1:
+            reward = reaching_reward
+
+            # Grasping reward
+            if self.has_grasp:
+                reward += 1.0
+
+        # Success reward
+        if self.check_success():
+            reward += 2.0
 
 
         self._step += 1
@@ -174,28 +157,34 @@ class FrankaEnv(gym.Env):
 
     def reset(self):
         # Set initial joint positions and velocities (fingers are open)
-        joint_pos = [0., 0., 0., -1.5708, 0., 1.5708, 0., 0.06, 0.06]
+        joint_pos = [0., 0., 0., -1.5708, 0., 1.5708, 0., 0.04, 0.04]
         joint_vel = [0., 0., 0., 0., 0., 0., 0., 0., 0.]
+        self.robot.reset()
         self.robot.set_positions(joint_pos)
         self.robot.set_velocities(joint_vel)
 
         eef_pos = self.target_eef_pose.translation()
         eef_vel = self.robot.body_velocity(self.eef_link_name)
+        eef_vel = [eef_vel[3], eef_vel[4], eef_vel[5]]
 
-        self.state = np.array([eef_pos[0], eef_pos[1], eef_pos[2],
-                               eef_vel[0], eef_vel[1], eef_vel[2], eef_vel[3], eef_vel[4], eef_vel[5]])
+        self.state = np.array([eef_pos, eef_vel])
 
-        # Distance thresholds
-        self.threshold_error = {1: 0.0035, 3: 0.00285, 5: 0.00245}
-
-        self.action = 0
+        self.phase = 0
+        self.has_grasp = False
         self._step = 0
 
         return self.state
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
+
         return [seed]
+
+    def check_success(self):
+        # Returns True if task has been completed
+        current_box_pos = self.box_body_pose.translation()
+
+        return self.has_grasp and current_box_pos[2] > 0.86
 
 
 class PITask:
@@ -235,20 +224,6 @@ def damped_pseudoinverse(jac, l=0.01):
     return np.linalg.inv(jac.T @ jac + l * l * np.eye(n)) @ jac.T
 
 
-def create_target_pose(robot, link, translation_vector_offset, target_translation_vector):
-    target_body_pose = robot.body_pose(link)
-
-    if target_translation_vector is None:
-        target_translation_vector = target_body_pose.translation()
-
-    for i in range(3):
-        target_translation_vector[i] += translation_vector_offset[i]
-
-    target_body_pose.set_translation(target_translation_vector)
-
-    return target_body_pose
-
-
 
 # Instantiate the simulated environment with domain randomization
 env = FrankaEnv()
@@ -266,5 +241,5 @@ model = TD3("MlpPolicy", env, action_noise=action_noise, verbose=1)
 timesteps = int(50000)
 
 # For every 10 episodes of learning, test to the real environment (with domain randomization)
-model.learn(total_timesteps=timesteps, log_interval=50)
+model.learn(total_timesteps=timesteps, log_interval=40)
 
