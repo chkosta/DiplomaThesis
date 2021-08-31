@@ -139,6 +139,20 @@ class FrankaEnv(gym.Env):
         elif self.phase == 1:
             reward = reaching_reward
 
+            # Check contact between fingers and cube
+            left_finger_touch = False
+            right_finger_touch = False
+
+            left_finger_pos = self.robot.positions()[7]
+            right_finger_pos = self.robot.positions()[8]
+
+            if left_finger_pos <= 0.03:
+                left_finger_touch = True
+            if right_finger_pos <= 0.03:
+                right_finger_touch = True
+
+            self.has_grasp = left_finger_touch and right_finger_touch
+
             # Grasping reward
             if self.has_grasp:
                 reward += 1.0
@@ -211,10 +225,6 @@ class PITask:
         self._sum_error = self._sum_error + error_in_world_frame * self._dt
 
         return self._Kp * error_in_world_frame + self._Ki * self._sum_error
-
-
-def error(tf, tf_desired):
-    return np.linalg.norm(rd.math.logMap(tf.inverse().multiply(tf_desired)))
 
 
 def damped_pseudoinverse(jac, l=0.01):
