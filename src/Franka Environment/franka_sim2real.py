@@ -120,47 +120,21 @@ class FrankaEnv(gym.Env):
 
         # Reward function
         current_box_pos = self.box_body_pose.translation()
-        dist = euclidean(current_eef_pos, current_box_pos)
-        reaching_reward = dist
+        target_pos = current_box_pos + [0, 0, 0.25]
 
-        # Two phases of the task
-        # 0: Reaching the box
-        # 1: Grasping the box and lifting it up
-        if self.phase == 0:
-            reward = reaching_reward
+        reward = -0.1 * np.linalg.norm(current_eef_pos - current_box_pos)
 
-            # Gripper open reward
-            if gripper_vel < 0:
-                reward += abs(gripper_vel)
+        # if cube is lifted
+        if current_box_pos[2] > 0.04:
+            reward += 1.0                                                   # bonus for lifting the cube
+            reward += -0.5*np.linalg.norm(current_eef_pos - target_pos)     # make hand go to target
+            reward += -0.5*np.linalg.norm(current_box_pos - target_pos)     # make cube go to target
 
-            if dist < 0.025:
-                self.phase = 1
-
-        elif self.phase == 1:
-            reward = reaching_reward
-
-            # Check contact between fingers and cube
-            left_finger_touch = False
-            right_finger_touch = False
-
-            left_finger_pos = self.robot.positions()[7]
-            right_finger_pos = self.robot.positions()[8]
-
-            if left_finger_pos <= 0.03:
-                left_finger_touch = True
-            if right_finger_pos <= 0.03:
-                right_finger_touch = True
-
-            self.has_grasp = left_finger_touch and right_finger_touch
-
-            # Grasping reward
-            if self.has_grasp:
-                reward += 1.0
-
-        # Success reward
-        if self.check_success():
-            reward += 2.0
-
+        # BONUS
+        if np.linalg.norm(current_box_pos-target_pos) < 0.1:
+            reward += 10.0                                                  # bonus for cube close to target
+        if np.linalg.norm(current_box_pos-target_pos) < 0.05:
+            reward += 20.0                                                  # bonus for cube "very" close to target
 
         self._step += 1
         done = False
@@ -182,9 +156,6 @@ class FrankaEnv(gym.Env):
         eef_vel = [eef_vel[3], eef_vel[4], eef_vel[5]]
 
         self.state = np.array([eef_pos, eef_vel])
-
-        self.phase = 0
-        self.has_grasp = False
         self._step = 0
 
         return self.state
@@ -193,12 +164,6 @@ class FrankaEnv(gym.Env):
         self.np_random, seed = seeding.np_random(seed)
 
         return [seed]
-
-    def check_success(self):
-        # Returns True if task has been completed
-        current_box_pos = self.box_body_pose.translation()
-
-        return self.has_grasp and current_box_pos[2] > 0.86
 
 
 class PITask:
@@ -248,8 +213,7 @@ action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n
 
 model = TD3("MlpPolicy", env, action_noise=action_noise, verbose=1)
 
-timesteps = int(50000)
+timesteps = int(2000000)
 
-# For every 10 episodes of learning, test to the real environment (with domain randomization)
-model.learn(total_timesteps=timesteps, log_interval=40)
+model.learn(total_timesteps=timesteps, log_interval=400)
 
