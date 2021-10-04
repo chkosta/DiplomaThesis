@@ -34,7 +34,7 @@ class FrankaEnv(gym.Env):
         self.box_size = [0.05, 0.05, 0.05]
         self.tf = dartpy.math.Isometry3()
         self.tf.set_rotation(dartpy.math.eulerZYXToMatrix([0., 0., 0.]))
-        self.tf.set_translation([0.33, -0.41, self.box_size[2] / 2.])
+        self.tf.set_translation([0.4, 0.3, self.box_size[2] / 2.])
         self.box_pose = rd.math.logMap(self.tf.rotation()).tolist() + self.tf.translation().tolist()
         self.box = rd.Robot.create_box(self.box_size, self.box_pose, "free", mass=0.01, color=[0.1, 0.2, 0.9, 1.0])
 
@@ -76,7 +76,7 @@ class FrankaEnv(gym.Env):
         self.box_min_pos_y = -2.
         self.box_max_pos_y = 2.
         self.box_min_pos_z = self.box_size[2] / 2.
-        self.box_max_pos_z = self.box_size[2]/2. + 0.4
+        self.box_max_pos_z = 1.190
 
         # Spaces
         action_low = np.array([self.eef_min_velocity, self.eef_min_velocity, self.eef_min_velocity, self.finger_min_velocity], dtype=np.float32)
@@ -104,18 +104,18 @@ class FrankaEnv(gym.Env):
     def step(self, vel2):
 
         # At each step get the end effector pose
-        current_eef_pose = self.robot.body_pose(self.eef_link_name)
+        last_eef_pose = self.robot.body_pose(self.eef_link_name)
 
-        # At each step get the box pose
-        current_box_pose = self.box.base_pose()
-
-        vel1 = self.controller.update(current_eef_pose)
+        vel1 = self.controller.update(last_eef_pose)
         vel = [vel1[0], vel1[1], vel1[2], vel2[0], vel2[1], vel2[2]]
         jac = self.robot.jacobian(self.eef_link_name)
         jac_pinv = damped_pseudoinverse(jac)
         cmd = jac_pinv @ vel
 
-        finger_vel = vel2[3]
+        for i in range(7):
+            cmd[i] = np.clip(cmd[i], self.eef_min_velocity, self.eef_max_velocity)
+
+        finger_vel = np.clip(vel2[3], self.finger_min_velocity, self.finger_max_velocity)
         cmd[7] = finger_vel
         cmd[8] = 0.
 
@@ -125,6 +125,12 @@ class FrankaEnv(gym.Env):
             # Run one simulated step
             self.simu.step_world()
 
+
+        # At each step get the end effector pose
+        current_eef_pose = self.robot.body_pose(self.eef_link_name)
+
+        # At each step get the box pose
+        current_box_pose = self.box.base_pose()
 
         current_eef_pos = current_eef_pose.translation()
         current_eef_vel = self.robot.body_velocity(self.eef_link_name)
@@ -157,6 +163,16 @@ class FrankaEnv(gym.Env):
         if self._step >= 1000:
             done = True
             print("Reward:", reward)
+
+        sum = np.sum(current_box_pos)
+        isnan = np.isnan(sum)
+
+        if isnan:
+            print("Cmd velocities:", cmd)
+            print("Current eef pos:", current_eef_pos)
+            print("Current box pos:", current_box_pos)
+            print("Reward:", reward)
+            exit()
 
         return self.state, reward, done, {}
 
@@ -217,7 +233,7 @@ class VisualizeFrankaEnv(gym.Env):
         self.box_size = [0.05, 0.05, 0.05]
         self.tf = dartpy.math.Isometry3()
         self.tf.set_rotation(dartpy.math.eulerZYXToMatrix([0., 0., 0.]))
-        self.tf.set_translation([0.33, -0.41, self.box_size[2] / 2.])
+        self.tf.set_translation([0.4, 0.3, self.box_size[2] / 2.])
         self.box_pose = rd.math.logMap(self.tf.rotation()).tolist() + self.tf.translation().tolist()
         self.box = rd.Robot.create_box(self.box_size, self.box_pose, "free", mass=0.01, color=[0.1, 0.2, 0.9, 1.0])
 
@@ -259,7 +275,7 @@ class VisualizeFrankaEnv(gym.Env):
         self.box_min_pos_y = -2.
         self.box_max_pos_y = 2.
         self.box_min_pos_z = self.box_size[2] / 2.
-        self.box_max_pos_z = self.box_size[2]/2. + 0.4
+        self.box_max_pos_z = 1.190
 
         # Spaces
         action_low = np.array([self.eef_min_velocity, self.eef_min_velocity, self.eef_min_velocity, self.finger_min_velocity], dtype=np.float32)
@@ -287,18 +303,18 @@ class VisualizeFrankaEnv(gym.Env):
     def step(self, vel2):
 
         # At each step get the end effector pose
-        current_eef_pose = self.robot.body_pose(self.eef_link_name)
+        last_eef_pose = self.robot.body_pose(self.eef_link_name)
 
-        # At each step get the box pose
-        current_box_pose = self.box.base_pose()
-
-        vel1 = self.controller.update(current_eef_pose)
+        vel1 = self.controller.update(last_eef_pose)
         vel = [vel1[0], vel1[1], vel1[2], vel2[0], vel2[1], vel2[2]]
         jac = self.robot.jacobian(self.eef_link_name)
         jac_pinv = damped_pseudoinverse(jac)
         cmd = jac_pinv @ vel
 
-        finger_vel = vel2[3]
+        for i in range(7):
+            cmd[i] = np.clip(cmd[i], self.eef_min_velocity, self.eef_max_velocity)
+
+        finger_vel = np.clip(vel2[3], self.finger_min_velocity, self.finger_max_velocity)
         cmd[7] = finger_vel
         cmd[8] = 0.
 
@@ -308,6 +324,12 @@ class VisualizeFrankaEnv(gym.Env):
             # Run one simulated step
             self.simu.step_world()
 
+
+        # At each step get the end effector pose
+        current_eef_pose = self.robot.body_pose(self.eef_link_name)
+
+        # At each step get the box pose
+        current_box_pose = self.box.base_pose()
 
         current_eef_pos = current_eef_pose.translation()
         current_eef_vel = self.robot.body_velocity(self.eef_link_name)
@@ -329,17 +351,14 @@ class VisualizeFrankaEnv(gym.Env):
         # BONUS
         if np.linalg.norm(current_box_pos-self.target_pos) < 0.1:
             reward += 10.0                                                  # bonus for cube close to target
-            print("CUBE IS CLOSE TO TARGET")
         if np.linalg.norm(current_box_pos-self.target_pos) < 0.05:
             reward += 20.0                                                  # bonus for cube "very" close to target
-            print("CUBE IS VERY CLOSE TO TARGET")
 
 
         self._step += 1
         done = False
         if self._step >= 1000:
             done = True
-            print(reward)
 
         return self.state, reward, done, {}
 
