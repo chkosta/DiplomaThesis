@@ -20,8 +20,6 @@ class FrankaEnv(gym.Env):
     def __init__(self):
         # RobotDART initialization data
         dt = 0.001
-        Kp = 2.
-        Ki = 0.01
         self.simu = rd.RobotDARTSimu(dt)
         self.simu.set_collision_detector("fcl")
 
@@ -36,7 +34,7 @@ class FrankaEnv(gym.Env):
         self.tf.set_rotation(dartpy.math.eulerZYXToMatrix([0., 0., 0.]))
         self.tf.set_translation([0.4, 0.3, self.box_size[2]/2.])
         self.box_pose = rd.math.logMap(self.tf.rotation()).tolist() + self.tf.translation().tolist()
-        self.box = rd.Robot.create_box(self.box_size, self.box_pose, "free", mass=0.5, color=[0.1, 0.2, 0.9, 1.0])
+        self.box = rd.Robot.create_box(self.box_size, self.box_pose, "free", mass=0.4, color=[0.1, 0.2, 0.9, 1.0])
 
         # Position Franka and box
         self.robot.set_actuator_types("servo")     # Control each joint by giving velocity commands
@@ -47,11 +45,10 @@ class FrankaEnv(gym.Env):
 
         # Get eef target pose
         self.eef_link_name = "panda_hand"
-        self.eef_target_pose = self.box.base_pose()
-        # self.eef_target_pose.set_translation([0.4, 0.3, 0.125])
+        self.eef_target_pose = self.robot.body_pose(self.eef_link_name)
 
         # Initialize controller
-        self.controller = PITask(self.eef_target_pose, dt, Kp, Ki)
+        self.controller = PITask(self.eef_target_pose, dt)
 
         # Visualization
         self.viewer = False
@@ -61,8 +58,8 @@ class FrankaEnv(gym.Env):
 
         # Limits
         # End effector
-        self.eef_min_velocity = -10.
-        self.eef_max_velocity = 10.
+        self.eef_min_velocity = -2.
+        self.eef_max_velocity = 2.
         self.finger_min_velocity = -0.2
         self.finger_max_velocity = 0.2
         self.eef_min_pos_x = -0.855
@@ -113,10 +110,6 @@ class FrankaEnv(gym.Env):
         jac_pinv = damped_pseudoinverse(jac)
         cmd = jac_pinv @ vel
 
-        # for i in range(7):
-        #     cmd[i] = np.clip(cmd[i], self.eef_min_velocity, self.eef_max_velocity)
-        #
-        # finger_vel = np.clip(vel2[3], self.finger_min_velocity, self.finger_max_velocity)
         cmd[7] = vel2[3]
         cmd[8] = 0.
 
@@ -127,15 +120,15 @@ class FrankaEnv(gym.Env):
             self.simu.step_world()
 
 
-        # At each step get the current end effector pose and velocity
+        # At each step get the current end effector position and velocity
         current_eef_pose = self.robot.body_pose(self.eef_link_name)
-        current_eef_vel = self.robot.body_velocity(self.eef_link_name)
-
-        # At each step get the box pose
-        current_box_pose = self.box.base_pose()
-
         current_eef_pos = current_eef_pose.translation()
+
+        current_eef_vel = self.robot.body_velocity(self.eef_link_name)
         current_eef_vel = [current_eef_vel[3], current_eef_vel[4], current_eef_vel[5]]
+
+        # At each step get the current box position
+        current_box_pose = self.box.base_pose()
         current_box_pos = current_box_pose.translation()
 
         self.state = np.array([current_eef_pos, current_eef_vel, current_box_pos])
@@ -144,9 +137,13 @@ class FrankaEnv(gym.Env):
         # Reward function
         reward = -0.1 * np.linalg.norm(current_eef_pos-current_box_pos)
 
+        # if hand is very close to cube
+        if np.linalg.norm(current_eef_pos-current_box_pos) < 0.05:
+            reward += 1.0                                                   # bonus for reaching the cube
+
         # if cube is lifted
-        if current_box_pos[2] > 0.025:
-            reward += 1.0                                                   # bonus for lifting the cube
+        if current_box_pos[2] > 0.08:
+            reward += 2.0                                                   # bonus for lifting the cube
             reward += -0.5*np.linalg.norm(current_eef_pos-self.target_pos)  # make hand go to target
             reward += -0.5*np.linalg.norm(current_box_pos-self.target_pos)  # make cube go to target
 
@@ -154,9 +151,11 @@ class FrankaEnv(gym.Env):
         if np.linalg.norm(current_box_pos-self.target_pos) < 0.15:
             reward += 10.0                                                  # bonus for cube close to target
             print("CUBE IS CLOSE TO TARGET")
+            print(np.linalg.norm(current_box_pos-self.target_pos))
         if np.linalg.norm(current_box_pos-self.target_pos) < 0.1:
             reward += 20.0                                                  # bonus for cube "very" close to target
             print("CUBE IS VERY CLOSE TO TARGET")
+            print(np.linalg.norm(current_box_pos-self.target_pos))
 
 
         self._step += 1
@@ -171,7 +170,7 @@ class FrankaEnv(gym.Env):
         self.visualize()
 
         # Set initial joint positions (fingers are close)
-        joint_pos = [0., 0., 0., -1.5708, 0., 1.5708, 0., 0., 0.]
+        joint_pos = [0., 0., 0., -1.5708, 0., 1.5708, 0.8, 0., 0.]
 
         self.robot.reset()
         self.robot.set_positions(joint_pos)
@@ -183,7 +182,7 @@ class FrankaEnv(gym.Env):
         eef_vel = [eef_vel[3], eef_vel[4], eef_vel[5]]
         box_pos = self.box.base_pose().translation()
 
-        self.target_pos = box_pos + [0., 0., 0.2]
+        self.target_pos = box_pos + [0., 0., 0.225]
 
         self.state = np.array([eef_pos, eef_vel, box_pos])
         self._step = 0
@@ -210,8 +209,6 @@ class VisualizeFrankaEnv(gym.Env):
     def __init__(self):
         # RobotDART initialization data
         dt = 0.001
-        Kp = 2.
-        Ki = 0.01
         self.simu = rd.RobotDARTSimu(dt)
         self.simu.set_collision_detector("fcl")
 
@@ -226,7 +223,7 @@ class VisualizeFrankaEnv(gym.Env):
         self.tf.set_rotation(dartpy.math.eulerZYXToMatrix([0., 0., 0.]))
         self.tf.set_translation([0.4, 0.3, self.box_size[2]/2.])
         self.box_pose = rd.math.logMap(self.tf.rotation()).tolist() + self.tf.translation().tolist()
-        self.box = rd.Robot.create_box(self.box_size, self.box_pose, "free", mass=0.5, color=[0.1, 0.2, 0.9, 1.0])
+        self.box = rd.Robot.create_box(self.box_size, self.box_pose, "free", mass=0.4, color=[0.1, 0.2, 0.9, 1.0])
 
         # Position Franka and box
         self.robot.set_actuator_types("servo")  # Control each joint by giving velocity commands
@@ -237,11 +234,10 @@ class VisualizeFrankaEnv(gym.Env):
 
         # Get eef target pose
         self.eef_link_name = "panda_hand"
-        self.eef_target_pose = self.box.base_pose()
-        # self.eef_target_pose.set_translation([0.4, 0.3, 0.125])
+        self.eef_target_pose = self.robot.body_pose(self.eef_link_name)
 
         # Initialize controller
-        self.controller = PITask(self.eef_target_pose, dt, Kp, Ki)
+        self.controller = PITask(self.eef_target_pose, dt)
 
         # Visualization
         self.viewer = True
@@ -251,8 +247,8 @@ class VisualizeFrankaEnv(gym.Env):
 
         # Limits
         # End effector
-        self.eef_min_velocity = -10.
-        self.eef_max_velocity = 10.
+        self.eef_min_velocity = -2.
+        self.eef_max_velocity = 2.
         self.finger_min_velocity = -0.2
         self.finger_max_velocity = 0.2
         self.eef_min_pos_x = -0.855
@@ -303,10 +299,6 @@ class VisualizeFrankaEnv(gym.Env):
         jac_pinv = damped_pseudoinverse(jac)
         cmd = jac_pinv @ vel
 
-        # for i in range(7):
-        #     cmd[i] = np.clip(cmd[i], self.eef_min_velocity, self.eef_max_velocity)
-        #
-        # finger_vel = np.clip(vel2[3], self.finger_min_velocity, self.finger_max_velocity)
         cmd[7] = vel2[3]
         cmd[8] = 0.
 
@@ -317,15 +309,15 @@ class VisualizeFrankaEnv(gym.Env):
             self.simu.step_world()
 
 
-        # At each step get the current end effector pose and velocity
+        # At each step get the current end effector position and velocity
         current_eef_pose = self.robot.body_pose(self.eef_link_name)
-        current_eef_vel = self.robot.body_velocity(self.eef_link_name)
-
-        # At each step get the box pose
-        current_box_pose = self.box.base_pose()
-
         current_eef_pos = current_eef_pose.translation()
+
+        current_eef_vel = self.robot.body_velocity(self.eef_link_name)
         current_eef_vel = [current_eef_vel[3], current_eef_vel[4], current_eef_vel[5]]
+
+        # At each step get the current box position
+        current_box_pose = self.box.base_pose()
         current_box_pos = current_box_pose.translation()
 
         self.state = np.array([current_eef_pos, current_eef_vel, current_box_pos])
@@ -334,9 +326,13 @@ class VisualizeFrankaEnv(gym.Env):
         # Reward function
         reward = -0.1 * np.linalg.norm(current_eef_pos-current_box_pos)
 
+        # if hand is very close to cube
+        if np.linalg.norm(current_eef_pos-current_box_pos) < 0.05:
+            reward += 1.0                                                       # bonus for reaching the cube
+
         # if cube is lifted
-        if current_box_pos[2] > 0.025:
-            reward += 1.0                                                       # bonus for lifting the cube
+        if current_box_pos[2] > 0.08:
+            reward += 2.0                                                       # bonus for lifting the cube
             reward += -0.5 * np.linalg.norm(current_eef_pos-self.target_pos)    # make hand go to target
             reward += -0.5 * np.linalg.norm(current_box_pos-self.target_pos)    # make cube go to target
 
@@ -344,9 +340,11 @@ class VisualizeFrankaEnv(gym.Env):
         if np.linalg.norm(current_box_pos-self.target_pos) < 0.15:
             reward += 10.0                                                      # bonus for cube close to target
             print("CUBE IS CLOSE TO TARGET")
+            print(np.linalg.norm(current_box_pos-self.target_pos))
         if np.linalg.norm(current_box_pos-self.target_pos) < 0.1:
             reward += 20.0                                                      # bonus for cube "very" close to target
             print("CUBE IS VERY CLOSE TO TARGET")
+            print(np.linalg.norm(current_box_pos-self.target_pos))
 
 
         self._step += 1
@@ -361,7 +359,7 @@ class VisualizeFrankaEnv(gym.Env):
         self.visualize()
 
         # Set initial joint positions (fingers are close)
-        joint_pos = [0., 0., 0., -1.5708, 0., 1.5708, 0., 0., 0.]
+        joint_pos = [0., 0., 0., -1.5708, 0., 1.5708, 0.8, 0., 0.]
 
         self.robot.reset()
         self.robot.set_positions(joint_pos)
@@ -373,7 +371,7 @@ class VisualizeFrankaEnv(gym.Env):
         eef_vel = [eef_vel[3], eef_vel[4], eef_vel[5]]
         box_pos = self.box.base_pose().translation()
 
-        self.target_pos = box_pos + [0., 0., 0.2]
+        self.target_pos = box_pos + [0., 0., 0.225]
 
         self.state = np.array([eef_pos, eef_vel, box_pos])
         self._step = 0
@@ -398,7 +396,7 @@ class VisualizeFrankaEnv(gym.Env):
 
 
 class PITask:
-    def __init__(self, target, dt, Kp=10., Ki=0.1):
+    def __init__(self, target, dt, Kp=50., Ki=0.01):
         self._target = target
         self._dt = dt
         self._Kp = Kp
@@ -458,6 +456,12 @@ model = TD3.load("td3_franka", env=visualize_env)
 
 # Visualize
 obs = visualize_env.reset()
+episode_reward = 0.
 for i in range(1000):
     action, states = model.predict(obs)
     obs, reward, done, info = visualize_env.step(action)
+
+    episode_reward += reward
+    if done:
+        print("Reward:", episode_reward)
+        episode_reward = 0.
