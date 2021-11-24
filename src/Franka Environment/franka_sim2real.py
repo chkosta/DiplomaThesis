@@ -6,10 +6,12 @@ from gym import spaces
 from gym.utils import seeding
 from matplotlib import pyplot as plt
 from stable_baselines3 import TD3
+from stable_baselines3.common.callbacks import CheckpointCallback
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.noise import NormalActionNoise
 import RobotDART as rd
 import dartpy
+import math
 
 
 
@@ -33,7 +35,7 @@ class FrankaEnv(gym.Env):
         self.tf.set_rotation(dartpy.math.eulerZYXToMatrix([0., 0., 0.]))
         self.tf.set_translation([0.4, 0.3, 0.02])
         self.box_pose = rd.math.logMap(self.tf.rotation()).tolist() + self.tf.translation().tolist()
-        self.box = rd.Robot.create_box(self.box_size, self.box_pose, "free", mass=0.4, color=[0.1, 0.2, 0.9, 1.0])
+        self.box = rd.Robot.create_box(self.box_size, self.box_pose, "free", mass=0.6, color=[0.1, 0.2, 0.9, 1.0])
 
         # Position Franka and box
         self.robot.set_actuator_types("servo")     # Control each joint by giving velocity commands
@@ -50,10 +52,10 @@ class FrankaEnv(gym.Env):
 
         # Limits
         # End effector
-        self.eef_min_velocity = -2.
-        self.eef_max_velocity = 2.
-        self.gripper_min_state = 0.
-        self.gripper_max_state = 1.
+        self.eef_min_vel = -2.
+        self.eef_max_vel = 2.
+        self.finger_min_vel = -0.2
+        self.finger_max_vel = 0.2
         self.eef_min_pos_x = -0.855
         self.eef_max_pos_x = 0.855
         self.eef_min_pos_y = -0.855
@@ -61,20 +63,20 @@ class FrankaEnv(gym.Env):
         self.eef_min_pos_z = 0.
         self.eef_max_pos_z = 1.190
         # Βox
-        self.box_min_pos_x = -2.
-        self.box_max_pos_x = 2.
-        self.box_min_pos_y = -2.
-        self.box_max_pos_y = 2.
+        self.box_min_pos_x = -2.5
+        self.box_max_pos_x = 2.5
+        self.box_min_pos_y = -2.5
+        self.box_max_pos_y = 2.5
         self.box_min_pos_z = 0.02
         self.box_max_pos_z = 1.190
 
         # Spaces
-        action_low = np.array([self.eef_min_velocity, self.eef_min_velocity, self.eef_min_velocity, self.gripper_min_state], dtype=np.float32)
-        action_high = np.array([self.eef_max_velocity, self.eef_max_velocity, self.eef_max_velocity, self.gripper_max_state], dtype=np.float32)
+        action_low = np.array([self.eef_min_vel, self.eef_min_vel, self.eef_min_vel, self.finger_min_vel], dtype=np.float32)
+        action_high = np.array([self.eef_max_vel, self.eef_max_vel, self.eef_max_vel, self.finger_max_vel], dtype=np.float32)
 
-        obs_low = np.array([[self.eef_min_pos_x, self.eef_min_pos_y, self.eef_min_pos_z], [self.eef_min_velocity, self.eef_min_velocity, self.eef_min_velocity],
+        obs_low = np.array([[self.eef_min_pos_x, self.eef_min_pos_y, self.eef_min_pos_z], [self.eef_min_vel, self.eef_min_vel, self.eef_min_vel],
                             [self.box_min_pos_x, self.box_min_pos_y, self.box_min_pos_z]], dtype=np.float32)
-        obs_high = np.array([[self.eef_max_pos_x, self.eef_max_pos_y, self.eef_max_pos_z], [self.eef_max_velocity, self.eef_max_velocity, self.eef_max_velocity],
+        obs_high = np.array([[self.eef_max_pos_x, self.eef_max_pos_y, self.eef_max_pos_z], [self.eef_max_vel, self.eef_max_vel, self.eef_max_vel],
                              [self.box_max_pos_x, self.box_max_pos_y, self.box_max_pos_z]], dtype=np.float32)
 
         self.action_space = spaces.Box(
@@ -91,34 +93,21 @@ class FrankaEnv(gym.Env):
 
         self.seed()
 
-    def step(self, action):
+    def step(self, vel2):
 
         for i in range(20):
             # At each step get the last end effector pose
             last_eef_pose = self.robot.body_pose(self.eef_link_name)
 
             vel1 = self.controller.update(last_eef_pose)
-            vel = [vel1[0], vel1[1], vel1[2], action[0], action[1], action[2]]
+            vel = [vel1[0], vel1[1], vel1[2], vel2[0], vel2[1], vel2[2]]
             jac = self.robot.jacobian(self.eef_link_name)
             jac_pinv = damped_pseudoinverse(jac)
             cmd = jac_pinv @ vel
 
-            gripper_state = action[3]
-            # Gripper is closed for values in [0,0.5) and open for values in [0.5,1]
-            # If gripper is closed
-            if gripper_state < 0.5:
-                # Open it
-                cmd[7] = 0.15
-                cmd[8] = 0.
-            # If gripper is open
-            else:
-                # Close it
-                cmd[7] = -0.15
-                cmd[8] = 0.
-
-            # fingers_vel = vel2[3]
-            # cmd[7] = fingers_vel
-            # cmd[8] = 0.
+            fingers_vel = vel2[3]
+            cmd[7] = fingers_vel
+            cmd[8] = 0.
 
             self.robot.set_commands(cmd)
 
@@ -142,24 +131,9 @@ class FrankaEnv(gym.Env):
         # Reward function
         reward = -0.1 * np.linalg.norm(current_eef_pos-current_box_pos)
 
-        # if gripper is close to cube and opening its fingers
-        if np.linalg.norm(current_eef_pos-current_box_pos) < 0.2 and gripper_state < 0.5:
-            reward += 0.5
-
-        # if gripper is above the cube and closing its fingers
-        if np.linalg.norm(current_eef_pos-current_box_pos) < 0.1 and gripper_state > 0.5:
-            reward += 1.0
-
-        # if cube is grabbed
-        curr_left_finger_pos = self.robot.body_pose("panda_leftfinger").translation()
-        curr_right_finger_pos = self.robot.body_pose("panda_rightfinger").translation()
-        if np.linalg.norm(curr_left_finger_pos-current_box_pos) < 0.04:
-            reward += 2.0
-            print("CUBE IS GRABBED", curr_left_finger_pos, curr_right_finger_pos)
-
         # if cube is lifted
-        if current_box_pos[2] > 0.1:
-            reward += 3.0                                                   # bonus for lifting the cube
+        if current_box_pos[2] > 0.08:
+            reward += 1.0                                                   # bonus for lifting the cube
             reward += -0.5*np.linalg.norm(current_eef_pos-self.target_pos)  # make gripper go to target
             reward += -0.5*np.linalg.norm(current_box_pos-self.target_pos)  # make cube go to target
             print("CUBE IS LIFTED", current_box_pos, current_eef_pos)
@@ -182,6 +156,13 @@ class FrankaEnv(gym.Env):
         done = False
         if self._step >= 500:
             done = True
+
+        if math.isnan(reward):
+            print("current eef pos:", current_eef_pos)
+            print("current cube pos:", current_box_pos)
+            print("velocities:", vel, fingers_vel)
+            print("cmd:", cmd)
+            exit()
 
         return self.state, reward, done, {}
 
@@ -210,7 +191,7 @@ class FrankaEnv(gym.Env):
         box_pos = self.box.base_pose_vec()
         box_pos = np.array([box_pos[3], box_pos[4], box_pos[5]])
 
-        self.target_pos = box_pos + [0., 0., 0.23]
+        self.target_pos = box_pos + [0., 0., 0.18]
 
         self.state = np.array([eef_pos, eef_vel, box_pos])
         self._step = 0
@@ -275,10 +256,15 @@ env = FrankaEnv(False)
 n_actions = env.action_space.shape[-1]
 action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
 
-model = TD3("MlpPolicy", env, action_noise=action_noise, verbose=1)
+# Save a checkpoint every 250000 steps
+checkpoint_callback = CheckpointCallback(save_freq=250000, save_path='./logs/')
 
-timesteps = int(2000000)
-model.learn(total_timesteps=timesteps, log_interval=100)
+# model = TD3("MlpPolicy", env, action_noise=action_noise, verbose=1)
+model = TD3.load("./logs/old/rl_model_4000000_steps")
+model.set_env(env)
+
+timesteps = int(8000000)
+model.learn(total_timesteps=timesteps, callback=checkpoint_callback, log_interval=100)
 
 model.save("td3_franka")
 del model # remove to demonstrate saving and loading
