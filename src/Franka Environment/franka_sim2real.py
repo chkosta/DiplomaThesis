@@ -5,7 +5,7 @@ import numpy as np
 from gym import spaces
 from gym.utils import seeding
 from matplotlib import pyplot as plt
-from stable_baselines3 import TD3
+from stable_baselines3 import TD3, SAC
 from stable_baselines3.common.callbacks import CheckpointCallback
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.noise import NormalActionNoise
@@ -130,12 +130,13 @@ class FrankaEnv(gym.Env):
 
         # Reward function
         reward = -0.1 * np.linalg.norm(current_eef_pos-current_box_pos)
+        reward += -0.5 * np.linalg.norm(current_box_pos - self.target_pos)  # make cube go to target
 
         # if cube is lifted
         if current_box_pos[2] > 0.08:
             reward += 1.0                                                   # bonus for lifting the cube
             reward += -0.5*np.linalg.norm(current_eef_pos-self.target_pos)  # make gripper go to target
-            reward += -0.5*np.linalg.norm(current_box_pos-self.target_pos)  # make cube go to target
+            # reward += -0.5*np.linalg.norm(current_box_pos-self.target_pos)  # make cube go to target
             print("CUBE IS LIFTED", current_box_pos, current_eef_pos)
 
         # BONUS
@@ -259,7 +260,8 @@ action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n
 # Save a checkpoint every 250000 steps
 checkpoint_callback = CheckpointCallback(save_freq=250000, save_path='./logs/')
 
-model = TD3("MlpPolicy", env, action_noise=action_noise, verbose=1)
+# model = TD3("MlpPolicy", env, action_noise=action_noise, verbose=1)
+model = TD3("MlpPolicy", env, action_noise=action_noise, verbose=1, device="cuda")
 
 # loaded_model = TD3.load("./logs/old/rl_model_8000000_steps")
 # loaded_model.load_replay_buffer("td3_replay_buffer")
