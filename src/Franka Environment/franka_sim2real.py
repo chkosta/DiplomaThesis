@@ -259,14 +259,18 @@ action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n
 # Save a checkpoint every 250000 steps
 checkpoint_callback = CheckpointCallback(save_freq=250000, save_path='./logs/')
 
-# model = TD3("MlpPolicy", env, action_noise=action_noise, verbose=1)
-model = TD3.load("./logs/old/rl_model_4000000_steps")
-model.set_env(env)
+model = TD3("MlpPolicy", env, action_noise=action_noise, verbose=1)
+
+# loaded_model = TD3.load("./logs/old/rl_model_8000000_steps")
+# loaded_model.load_replay_buffer("td3_replay_buffer")
+# loaded_model.set_env(env)
 
 timesteps = int(8000000)
 model.learn(total_timesteps=timesteps, callback=checkpoint_callback, log_interval=100)
 
-model.save("td3_franka")
+model.save("td3_franka_model")
+model.save_replay_buffer("td3_franka_replay_buffer")
+
 del model # remove to demonstrate saving and loading
 
 
@@ -274,7 +278,9 @@ del model # remove to demonstrate saving and loading
 env = FrankaEnv(True)
 
 # Load the trained model to the same environment
-model = TD3.load("td3_franka")
+model = TD3.load("td3_franka_model")
+model.load_replay_buffer("td3_franka_replay_buffer")
+
 
 # Run the learned policy one time to see what happens
 obs = env.reset()
