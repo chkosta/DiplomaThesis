@@ -246,6 +246,7 @@ def damped_pseudoinverse(jac, l=0.01):
 
 
 
+
 # Instantiate the simulated environment
 env = FrankaEnv(False)
 
