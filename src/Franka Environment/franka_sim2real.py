@@ -5,7 +5,7 @@ import numpy as np
 from gym import spaces
 from gym.utils import seeding
 from matplotlib import pyplot as plt
-from stable_baselines3 import TD3, SAC
+from stable_baselines3 import SAC
 from stable_baselines3.common.callbacks import CheckpointCallback
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.noise import NormalActionNoise
@@ -42,7 +42,7 @@ class FrankaEnv(gym.Env):
         self.robot.fix_to_world()
         self.simu.add_robot(self.robot)
         self.simu.add_robot(self.box)
-        self.simu.add_floor()
+        self.simu.add_floor(floor_width=20.0)
 
         # Visualization
         self.visualize(viewer)
@@ -130,27 +130,22 @@ class FrankaEnv(gym.Env):
 
         # Reward function
         reward = -0.1 * np.linalg.norm(current_eef_pos-current_box_pos)
-        reward += -0.5 * np.linalg.norm(current_box_pos - self.target_pos)  # make cube go to target
 
         # if cube is lifted
-        if current_box_pos[2] > 0.08:
-            reward += 1.0                                                   # bonus for lifting the cube
+        if current_box_pos[2] > 0.05:
+            reward += 5.0                                                   # bonus for lifting the cube
             reward += -0.5*np.linalg.norm(current_eef_pos-self.target_pos)  # make gripper go to target
-            # reward += -0.5*np.linalg.norm(current_box_pos-self.target_pos)  # make cube go to target
-            print("CUBE IS LIFTED", current_box_pos, current_eef_pos)
+            reward += -0.5*np.linalg.norm(current_box_pos-self.target_pos)  # make cube go to target
 
         # BONUS
         if np.linalg.norm(current_box_pos-self.target_pos) < 0.15:
             reward += 10.0                                                  # bonus for cube close to target
-            print("CUBE IS CLOSE TO TARGET", current_box_pos, self.target_pos)
 
         if np.linalg.norm(current_box_pos-self.target_pos) < 0.1:
             reward += 20.0                                                  # bonus for cube very close to target
-            print("CUBE IS VERY CLOSE TO TARGET", current_box_pos, self.target_pos)
 
         if np.linalg.norm(current_box_pos-self.target_pos) < 0.05:
             reward += 30.0                                                  # bonus for cube extremely close to target
-            print("CUBE IS EXTREMELY CLOSE TO TARGET", current_box_pos, self.target_pos)
 
 
         self._step += 1
@@ -186,6 +181,7 @@ class FrankaEnv(gym.Env):
         self.controller = PITask(self.eef_target_pose)
 
         eef_pos = self.robot.body_pose(self.eef_link_name).translation()
+
         eef_vel = self.robot.body_velocity(self.eef_link_name)
         eef_vel = np.array([eef_vel[3], eef_vel[4], eef_vel[5]])
 
@@ -209,7 +205,7 @@ class FrankaEnv(gym.Env):
             self.simu.scheduler().set_sync(False)
 
             graphics.camera().record(True)
-            graphics.record_video("td3_franka.mp4")
+            graphics.record_video("sac_franka.mp4")
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -253,25 +249,20 @@ def damped_pseudoinverse(jac, l=0.01):
 # Instantiate the simulated environment
 env = FrankaEnv(False)
 
-# The noise objects for TD3
+# The noise objects for SAC
 n_actions = env.action_space.shape[-1]
 action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
 
 # Save a checkpoint every 250000 steps
 checkpoint_callback = CheckpointCallback(save_freq=250000, save_path='./logs/')
 
-# model = TD3("MlpPolicy", env, action_noise=action_noise, verbose=1)
-model = TD3("MlpPolicy", env, action_noise=action_noise, verbose=1, device="cuda")
+model = SAC(policy="MlpPolicy", env=env, action_noise=action_noise, verbose=1, device="cuda")
 
-# loaded_model = TD3.load("./logs/old/rl_model_8000000_steps")
-# loaded_model.load_replay_buffer("td3_replay_buffer")
-# loaded_model.set_env(env)
-
-timesteps = int(8000000)
+timesteps = int(4000000)
 model.learn(total_timesteps=timesteps, callback=checkpoint_callback, log_interval=100)
 
-model.save("td3_franka_model")
-model.save_replay_buffer("td3_franka_replay_buffer")
+model.save("sac_franka_model")
+model.save_replay_buffer("sac_franka_replay_buffer")
 
 del model # remove to demonstrate saving and loading
 
@@ -280,8 +271,8 @@ del model # remove to demonstrate saving and loading
 env = FrankaEnv(True)
 
 # Load the trained model to the same environment
-model = TD3.load("td3_franka_model")
-model.load_replay_buffer("td3_franka_replay_buffer")
+model = SAC.load("sac_franka_model")
+model.load_replay_buffer("sac_franka_replay_buffer")
 
 
 # Run the learned policy one time to see what happens
