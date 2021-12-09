@@ -35,14 +35,15 @@ class FrankaEnv(gym.Env):
         self.tf.set_rotation(dartpy.math.eulerZYXToMatrix([0., 0., 0.]))
         self.tf.set_translation([0.4, 0.3, 0.02])
         self.box_pose = rd.math.logMap(self.tf.rotation()).tolist() + self.tf.translation().tolist()
-        self.box = rd.Robot.create_box(self.box_size, self.box_pose, "free", mass=0.6, color=[0.1, 0.2, 0.9, 1.0])
+        self.box = rd.Robot.create_box(self.box_size, self.box_pose, "free", mass=0.4, color=[0.1, 0.2, 0.9, 1.0])
 
         # Position Franka and box
-        self.robot.set_actuator_types("servo")     # Control each joint by giving velocity commands
+        self.robot.set_actuator_types("torque")                     # Control each joint by giving torque commands
+        self.robot.set_actuator_types("servo", ["panda_joint7"])    # Control gripper joint by giving velocity commands
         self.robot.fix_to_world()
         self.simu.add_robot(self.robot)
         self.simu.add_robot(self.box)
-        self.simu.add_floor(floor_width=20.0)
+        self.simu.add_floor(floor_width=40.0)
 
         # Visualization
         self.visualize(viewer)
@@ -259,7 +260,7 @@ checkpoint_callback = CheckpointCallback(save_freq=250000, save_path='./logs/')
 
 model = SAC(policy="MlpPolicy", env=env, action_noise=action_noise, verbose=1, device="cuda")
 
-timesteps = int(4000000)
+timesteps = int(6000000)
 model.learn(total_timesteps=timesteps, callback=checkpoint_callback, log_interval=100)
 
 model.save("sac_franka_model")
