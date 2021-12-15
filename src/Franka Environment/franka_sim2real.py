@@ -16,7 +16,7 @@ import math
 
 
 class FrankaEnv(gym.Env):
-    metadata = {'render.modes': ['human']}
+    metadata = {"render.modes": ["human"]}
 
     def __init__(self, viewer):
         # RobotDART initialization data
@@ -38,8 +38,8 @@ class FrankaEnv(gym.Env):
         self.box = rd.Robot.create_box(self.box_size, self.box_pose, "free", mass=0.4, color=[0.1, 0.2, 0.9, 1.0])
 
         # Position Franka and box
-        self.robot.set_actuator_types("torque")                     # Control each joint by giving torque commands
-        self.robot.set_actuator_types("servo", ["panda_joint7"])    # Control gripper joint by giving velocity commands
+        self.robot.set_actuator_types("torque")                                                                   # Control each joint by giving torque commands
+        self.robot.set_actuator_types("servo", ["panda_joint7", "panda_finger_joint1", "panda_finger_joint2"])    # Control gripper joint by giving velocity commands
         self.robot.fix_to_world()
         self.simu.add_robot(self.robot)
         self.simu.add_robot(self.box)
@@ -110,6 +110,15 @@ class FrankaEnv(gym.Env):
             cmd[7] = fingers_vel
             cmd[8] = 0.
 
+            # Gravity Compensation to achieve equilibrium
+            c = self.robot.coriolis_gravity_forces(["panda_joint1", "panda_joint2", "panda_joint3", "panda_joint4", "panda_joint5", "panda_joint6"])
+
+            grav_comp_cmds = [cmd[0], cmd[1], cmd[2], cmd[3], cmd[4], cmd[5]]
+            grav_comp_cmds = grav_comp_cmds + c
+
+            for i in range(6):
+                cmd[i] = grav_comp_cmds[i]
+
             self.robot.set_commands(cmd)
 
             # Run one simulated step
@@ -137,6 +146,7 @@ class FrankaEnv(gym.Env):
             reward += 5.0                                                   # bonus for lifting the cube
             reward += -0.5*np.linalg.norm(current_eef_pos-self.target_pos)  # make gripper go to target
             reward += -0.5*np.linalg.norm(current_box_pos-self.target_pos)  # make cube go to target
+            print("CUBE IS LIFTED")
 
         # BONUS
         if np.linalg.norm(current_box_pos-self.target_pos) < 0.15:
@@ -215,7 +225,7 @@ class FrankaEnv(gym.Env):
 
 
 class PITask:
-    def __init__(self, target, dt=0.001, Kp=200., Ki=2.):
+    def __init__(self, target, dt=0.001, Kp=300., Ki=2.):
         self._target = target
         self._dt = dt
         self._Kp = Kp
@@ -256,7 +266,7 @@ n_actions = env.action_space.shape[-1]
 action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
 
 # Save a checkpoint every 250000 steps
-checkpoint_callback = CheckpointCallback(save_freq=250000, save_path='./logs/')
+checkpoint_callback = CheckpointCallback(save_freq=250000, save_path="./logs/")
 
 model = SAC(policy="MlpPolicy", env=env, action_noise=action_noise, verbose=1, device="cuda")
 
