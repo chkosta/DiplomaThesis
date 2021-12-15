@@ -228,19 +228,19 @@ def load(dir):
     reward = []
     reward_non = []
 
-    if dir == "./logs/logs1/Randomized/monitor.csv":
+    if dir == "./logs/Randomized/monitor.csv":
         for row in csv_df:
             reward.append(float(row[0]))
         reward_list.append(reward)
         print(reward_list)
 
-    if dir == "./logs/logs1/NonRandomized/monitor.csv":
+    if dir == "./logs/NonRandomized/monitor.csv":
         for row in csv_df:
             reward_non.append(float(row[0]))
         reward_list_non.append(reward_non)
         print(reward_list_non)
 
-    if dir == "./logs/logs2/monitor.csv":
+    if dir == "./logs/Boxplot/monitor.csv":
         for row in csv_df:
             reward.append(float(row[0]))
 
@@ -259,20 +259,12 @@ def perc(reward_list):
 
 
 
-# Create log directories
-log_randomized = "./logs/logs1/Randomized/"
-os.makedirs(log_randomized, exist_ok=True)
-log_non_randomized = "./logs/logs1/NonRandomized/"
-os.makedirs(log_non_randomized, exist_ok=True)
-log_dir = "./logs/logs2/"
-os.makedirs(log_dir, exist_ok=True)
-
 
 reward_list = []
 reward_list_non = []
 
-# Run 20 times
-for i in range(20):
+# Run 10 times
+for i in range(10):
 
     # Instantiate the simulated environment with domain randomization
     randomized_env = RandomizedPendulumEnv()
@@ -282,9 +274,9 @@ for i in range(20):
 
     # Instantiate the real environment and wrap it
     env_test = TestPendulumEnv()
-    env_test1 = Monitor(env_test, log_randomized)
-    env_test2 = Monitor(env_test, log_non_randomized)
-    env_test3 = Monitor(env_test, log_dir)
+    # env_test1 = Monitor(env_test, "./logs/Randomized/")
+    # env_test2 = Monitor(env_test, "./logs/NonRandomized/")
+    env_test3 = Monitor(env_test, "./logs/Boxplot/")
 
     # Check for warnings
     # check_env(randomized_env)
@@ -294,31 +286,31 @@ for i in range(20):
     n_actions = randomized_env.action_space.shape[-1]
     action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
 
-    randomized_model = TD3("MlpPolicy", randomized_env, action_noise=action_noise, verbose=1)
-    non_randomized_model = TD3("MlpPolicy", non_randomized_env, action_noise=action_noise, verbose=1)
-    # model = TD3("MlpPolicy", randomized_env, action_noise=action_noise, verbose=1)
+    # randomized_model = TD3("MlpPolicy", randomized_env, action_noise=action_noise, verbose=1)
+    # non_randomized_model = TD3("MlpPolicy", non_randomized_env, action_noise=action_noise, verbose=1)
+    model = TD3("MlpPolicy", randomized_env, action_noise=action_noise, verbose=1)
 
-    timesteps = int(50000)
+    timesteps = int(500000)
 
-    # For every 10 episodes of learning, test to the real environment (with domain randomization)
-    randomized_model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test1, eval_freq=2000, n_eval_episodes=1, eval_log_path=log_randomized)
-    # For every 10 episodes of learning, test to the real environment (without domain randomization)
-    non_randomized_model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test2, eval_freq=2000, n_eval_episodes=1, eval_log_path=log_non_randomized)
+    # # For every 10 episodes of learning, test to the real environment (with domain randomization)
+    # randomized_model.learn(total_timesteps=timesteps, log_interval=500, eval_env=env_test1, eval_freq=2000, n_eval_episodes=1, eval_log_path="./logs/Randomized/")
+    # # For every 10 episodes of learning, test to the real environment (without domain randomization)
+    # non_randomized_model.learn(total_timesteps=timesteps, log_interval=500, eval_env=env_test2, eval_freq=2000, n_eval_episodes=1, eval_log_path="./logs/NonRandomized/")
 
-    # After 50000 steps of learning, test to the real environment
-    # model.learn(total_timesteps=timesteps, log_interval=50, eval_env=env_test3, eval_freq=50000, n_eval_episodes=10, eval_log_path=log_dir)
+    # After 500000 steps of learning, test to the real environment
+    model.learn(total_timesteps=timesteps, log_interval=500, eval_env=env_test3, eval_freq=500000, n_eval_episodes=1, eval_log_path="./logs/Boxplot/")
 
 
     # Dataframe split to get only the important data (rewards)
-    choice = 1
-    dir_randomized = "./logs/logs1/Randomized/monitor.csv"
-    load(dir_randomized)
-    dir_non_randomized = "./logs/logs1/NonRandomized/monitor.csv"
-    load(dir_non_randomized)
+    # choice = 1
+    # dir_randomized = "./logs/Randomized/monitor.csv"
+    # load(dir_randomized)
+    # dir_non_randomized = "./logs/NonRandomized/monitor.csv"
+    # load(dir_non_randomized)
 
-    # choice = 2
-    # dir = "./logs/logs2/monitor.csv"
-    # load(dir)
+    choice = 2
+    dir = "./logs/Boxplot/monitor.csv"
+    load(dir)
 
 
 
