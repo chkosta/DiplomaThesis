@@ -28,6 +28,7 @@ class FrankaEnv(gym.Env):
         packages = [("franka_description", "franka/franka_description")]
         self.robot = rd.Robot("franka/franka.urdf", packages)
         self.robot.set_color_mode("material")
+        self.model = rd.Robot("franka/franka.urdf", packages)
 
         # Load box
         self.box_size = [0.04, 0.04, 0.04]
@@ -39,8 +40,9 @@ class FrankaEnv(gym.Env):
 
         # Position Franka and box
         self.robot.set_actuator_types("torque")                                                                   # Control each joint by giving torque commands
-        self.robot.set_actuator_types("servo", ["panda_joint7", "panda_finger_joint1", "panda_finger_joint2"])    # Control gripper joint by giving velocity commands
+        self.robot.set_actuator_types("servo", ["panda_joint7", "panda_finger_joint1", "panda_finger_joint2"])    # Control gripper joints by giving velocity commands
         self.robot.fix_to_world()
+        self.model.fix_to_world()
         self.simu.add_robot(self.robot)
         self.simu.add_robot(self.box)
         self.simu.add_floor(floor_width=40.0)
@@ -110,8 +112,12 @@ class FrankaEnv(gym.Env):
             cmd[7] = fingers_vel
             cmd[8] = 0.
 
+
+            self.model.set_positions(self.robot.positions())
+            self.model.set_velocities(self.robot.velocities())
+
             # Gravity Compensation to achieve equilibrium
-            c = self.robot.coriolis_gravity_forces(["panda_joint1", "panda_joint2", "panda_joint3", "panda_joint4", "panda_joint5", "panda_joint6"])
+            c = self.model.coriolis_gravity_forces(["panda_joint1", "panda_joint2", "panda_joint3", "panda_joint4", "panda_joint5", "panda_joint6"])
 
             grav_comp_cmds = [cmd[0], cmd[1], cmd[2], cmd[3], cmd[4], cmd[5]]
             grav_comp_cmds = grav_comp_cmds + c
