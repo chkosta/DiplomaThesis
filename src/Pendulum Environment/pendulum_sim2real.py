@@ -1,6 +1,4 @@
 import csv
-import os
-from os import path
 import gym
 from gym import spaces
 from gym.utils import seeding
@@ -8,23 +6,21 @@ from matplotlib import pyplot as plt
 from stable_baselines3 import TD3
 from stable_baselines3.common.noise import NormalActionNoise
 from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.env_checker import check_env
 import numpy as np
 
 
 
-class RandomizedPendulumEnv(gym.Env):
-    metadata = {
-        'render.modes': ['human', 'rgb_array'],
-        'video.frames_per_second': 30
-    }
+class PendulumEnv(gym.Env):
 
-    def __init__(self, g=10.0):
+    def __init__(self, rand_value, g=10.0):
         self.max_speed = 8
         self.max_torque = 2.
         self.dt = .05
         self.g = g
         self._step = 0
+
+        # Randomization
+        self.randomization = rand_value
 
         high = np.array([1., 1., self.max_speed], dtype=np.float32)
         self.action_space = spaces.Box(
@@ -41,9 +37,6 @@ class RandomizedPendulumEnv(gym.Env):
 
         self.seed()
 
-    def seed(self, seed=None):
-        self.np_random, seed = seeding.np_random(seed)
-        return [seed]
 
     def step(self, u):
         th, thdot = self.state  # th := theta
@@ -54,105 +47,62 @@ class RandomizedPendulumEnv(gym.Env):
         dt = self.dt
 
         u = np.clip(u, -self.max_torque, self.max_torque)[0]
-        costs = angle_normalize(th) ** 2 + .1 * thdot ** 2 + .001 * (u ** 2)
+
+        # Reward function
+        reward = angle_normalize(th) ** 2 + .1 * thdot ** 2 + .001 * (u ** 2)
+
 
         newthdot = thdot + (-3 * g / (2 * l) * np.sin(th + np.pi) + 3. / (m * l ** 2) * u) * dt
         newth = th + newthdot * dt
         newthdot = np.clip(newthdot, -self.max_speed, self.max_speed)
 
         self.state = np.array([newth, newthdot])
+
+
         self._step += 1
         done = False
         if self._step >= 200:
             done = True
-        return self.get_obs(), -costs, done, {}
+
+        return self.get_obs(), -reward, done, {}
+
 
     def reset(self):
+        # State Randomization
         high = np.array([np.pi, 1])
         self.state = self.np_random.uniform(low=-high, high=high)
-        self.m = self.np_random.uniform(0.7, 1.3)       # uniform sample from mass range
-        self.l = self.np_random.uniform(0.7, 1.3)       # uniform sample from length range
+
+        # Randomization
+        self.randomize(randomization)
+
         self._step = 0
         return self.get_obs()
+
 
     def get_obs(self):
         theta, thetadot = self.state
         return np.array([np.cos(theta), np.sin(theta), thetadot])
 
 
-class NonRandomizedPendulumEnv(gym.Env):
-    metadata = {
-        'render.modes': ['human', 'rgb_array'],
-        'video.frames_per_second': 30
-    }
+    def randomize(self, randomization):
+        if randomization:
+            # Randomize pendulum mass +-30%
+            self.m = self.np_random.uniform(0.70, 1.30)
+            # Randomize pendulum length +-30%
+            self.l = self.np_random.uniform(0.70, 1.30)
 
-    def __init__(self, g=10.0):
-        self.max_speed = 8
-        self.max_torque = 2.
-        self.dt = .05
-        self.g = g
-        # Fixed mass, length values
-        self.m = 1.3
-        self.l = 1.3
-        self._step = 0
+        else:
+            # Set fixed mass, length values +30%
+            self.m = 1.30
+            self.l = 1.30
 
-        high = np.array([1., 1., self.max_speed], dtype=np.float32)
-        self.action_space = spaces.Box(
-            low=-self.max_torque,
-            high=self.max_torque,
-            shape=(1,),
-            dtype=np.float32
-        )
-        self.observation_space = spaces.Box(
-            low=-high,
-            high=high,
-            dtype=np.float32
-        )
-
-        self.seed()
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
-
-    def step(self, u):
-        th, thdot = self.state  # th := theta
-
-        g = self.g
-        m = self.m
-        l = self.l
-        dt = self.dt
-
-        u = np.clip(u, -self.max_torque, self.max_torque)[0]
-        costs = angle_normalize(th) ** 2 + .1 * thdot ** 2 + .001 * (u ** 2)
-
-        newthdot = thdot + (-3 * g / (2 * l) * np.sin(th + np.pi) + 3. / (m * l ** 2) * u) * dt
-        newth = th + newthdot * dt
-        newthdot = np.clip(newthdot, -self.max_speed, self.max_speed)
-
-        self.state = np.array([newth, newthdot])
-        self._step += 1
-        done = False
-        if self._step >= 200:
-            done = True
-        return self.get_obs(), -costs, done, {}
-
-    def reset(self):
-        high = np.array([np.pi, 1])
-        self.state = self.np_random.uniform(low=-high, high=high)
-        self._step = 0
-        return self.get_obs()
-
-    def get_obs(self):
-        theta, thetadot = self.state
-        return np.array([np.cos(theta), np.sin(theta), thetadot])
 
 
 class TestPendulumEnv(gym.Env):
-    metadata = {
-        'render.modes': ['human', 'rgb_array'],
-        'video.frames_per_second': 30
-    }
 
     def __init__(self, g=10.0):
         self.max_speed = 8
@@ -162,7 +112,9 @@ class TestPendulumEnv(gym.Env):
         self.m = 1.
         self.l = 1.
         self._step = 0
-        self.b = 0.2        # damping parameter
+
+        # Damping parameter
+        self.b = 0.2
 
         high = np.array([1., 1., self.max_speed], dtype=np.float32)
         self.action_space = spaces.Box(
@@ -178,9 +130,6 @@ class TestPendulumEnv(gym.Env):
 
         self.seed()
 
-    def seed(self, seed=None):
-        self.np_random, seed = seeding.np_random(seed)
-        return [seed]
 
     def step(self, u):
         th, thdot = self.state  # th := theta
@@ -192,28 +141,43 @@ class TestPendulumEnv(gym.Env):
         b = self.b
 
         u = np.clip(u, -self.max_torque, self.max_torque)[0]
-        costs = angle_normalize(th) ** 2 + .1 * thdot ** 2 + .001 * (u ** 2)
+
+        # Reward function
+        reward = angle_normalize(th) ** 2 + .1 * thdot ** 2 + .001 * (u ** 2)
+
 
         newthdot = thdot + (-3 * g / (2 * l) * np.sin(th + np.pi) + 3. / (m * l ** 2) * (u - b * thdot)) * dt       # add damping to angular velocity
         newth = th + newthdot * dt
         newthdot = np.clip(newthdot, -self.max_speed, self.max_speed)
 
         self.state = np.array([newth, newthdot])
+
+
         self._step += 1
         done = False
         if self._step >= 200:
             done = True
-        return self.get_obs(), -costs, done, {}
+
+        return self.get_obs(), -reward, done, {}
+
 
     def reset(self):
+        # State Randomization
         high = np.array([np.pi, 1])
         self.state = self.np_random.uniform(low=-high, high=high)
+
         self._step = 0
         return self.get_obs()
+
 
     def get_obs(self):
         theta, thetadot = self.state
         return np.array([np.cos(theta), np.sin(theta), thetadot])
+
+
+    def seed(self, seed=None):
+        self.np_random, seed = seeding.np_random(seed)
+        return [seed]
 
 
 def angle_normalize(x):
@@ -267,50 +231,71 @@ reward_list_non = []
 for i in range(10):
 
     # Instantiate the simulated environment with domain randomization
-    randomized_env = RandomizedPendulumEnv()
-
-    # Instantiate the simulated environment without domain randomization
-    non_randomized_env = NonRandomizedPendulumEnv()
-
-    # Instantiate the real environment and wrap it
-    env_test = TestPendulumEnv()
-    # env_test1 = Monitor(env_test, "./logs/Randomized/")
-    # env_test2 = Monitor(env_test, "./logs/NonRandomized/")
-    env_test3 = Monitor(env_test, "./logs/Boxplot/")
-
-    # Check for warnings
-    # check_env(randomized_env)
-
+    randomization = True
+    randomized_env = PendulumEnv(randomization)
+    # Instantiate the real environment
+    test_rand_env = TestPendulumEnv()
+    # Monitor the real environment
+    test_rand_mon = Monitor(test_rand_env, "./logs/Randomized/")
 
     # The noise objects for TD3
     n_actions = randomized_env.action_space.shape[-1]
     action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
 
-    # randomized_model = TD3("MlpPolicy", randomized_env, action_noise=action_noise, verbose=1)
-    # non_randomized_model = TD3("MlpPolicy", non_randomized_env, action_noise=action_noise, verbose=1)
-    model = TD3("MlpPolicy", randomized_env, action_noise=action_noise, verbose=1)
+    randomized_model = TD3("MlpPolicy", randomized_env, action_noise=action_noise, verbose=1)
 
     timesteps = int(500000)
+    # For every 10 episodes of learning, test to the real environment (with domain randomization)
+    randomized_model.learn(total_timesteps=timesteps, log_interval=500, eval_env=test_rand_mon, eval_freq=2000, n_eval_episodes=1, eval_log_path="./logs/Randomized/")
 
-    # # For every 10 episodes of learning, test to the real environment (with domain randomization)
-    # randomized_model.learn(total_timesteps=timesteps, log_interval=500, eval_env=env_test1, eval_freq=2000, n_eval_episodes=1, eval_log_path="./logs/Randomized/")
-    # # For every 10 episodes of learning, test to the real environment (without domain randomization)
-    # non_randomized_model.learn(total_timesteps=timesteps, log_interval=500, eval_env=env_test2, eval_freq=2000, n_eval_episodes=1, eval_log_path="./logs/NonRandomized/")
 
-    # After 500000 steps of learning, test to the real environment
-    model.learn(total_timesteps=timesteps, log_interval=500, eval_env=env_test3, eval_freq=500000, n_eval_episodes=1, eval_log_path="./logs/Boxplot/")
+
+    # Instantiate the simulated environment without domain randomization
+    randomization = False
+    non_randomized_env = PendulumEnv(randomization)
+    # Instantiate the real environment
+    test_nonrand_env = TestPendulumEnv()
+    # Monitor the real environment
+    test_nonrand_mon = Monitor(test_nonrand_env, "./logs/NonRandomized/")
+
+    # The noise objects for TD3
+    n_actions = non_randomized_env.action_space.shape[-1]
+    action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
+
+    non_randomized_model = TD3("MlpPolicy", non_randomized_env, action_noise=action_noise, verbose=1)
+
+    # For every 10 episodes of learning, test to the real environment (without domain randomization)
+    non_randomized_model.learn(total_timesteps=timesteps, log_interval=500, eval_env=test_nonrand_mon, eval_freq=2000, n_eval_episodes=1, eval_log_path="./logs/NonRandomized/")
+
+
+
+    # # Instantiate the simulated environment with domain randomization
+    # randomization = True
+    # randomized_env = PendulumEnv(randomization)
+    # # Instantiate the real environment
+    # test_rand_env = TestPendulumEnv()
+    # # Monitor the real environment
+    # test_rand_mon = Monitor(test_rand_env, "./logs/Boxplot/")
+    #
+    #
+    # # The noise objects for TD3
+    # n_actions = randomized_env.action_space.shape[-1]
+    # action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
+    #
+    # model = TD3("MlpPolicy", randomized_env, action_noise=action_noise, verbose=1)
+    #
+    # timesteps = int(500000)
+    # # After 500000 steps of learning, test to the real environment (with domain randomization)
+    # model.learn(total_timesteps=timesteps, log_interval=500, eval_env=test_rand_mon, eval_freq=500000, n_eval_episodes=1, eval_log_path="./logs/Boxplot/")
 
 
     # Dataframe split to get only the important data (rewards)
-    # choice = 1
-    # dir_randomized = "./logs/Randomized/monitor.csv"
-    # load(dir_randomized)
-    # dir_non_randomized = "./logs/NonRandomized/monitor.csv"
-    # load(dir_non_randomized)
+    choice = 1
+    load("./logs/Randomized/monitor.csv")
+    load("./logs/NonRandomized/monitor.csv")
 
-    choice = 2
-    dir = "./logs/Boxplot/monitor.csv"
-    load(dir)
+    # choice = 2
+    # load("./logs/Boxplot/monitor.csv")
 
 
 
@@ -323,24 +308,24 @@ if choice == 1:
     rwd_med_list_non, rwd_perc_25_non, rwd_perc_75_non = perc(reward_list_non)
 
 
-    # Timesteps list
-    tmps_list = list(range(2000, timesteps+2000, 2000))
+    # Iteration list
+    iter_list = list(range(10, 2510, 10))
 
-    plt.fill_between(tmps_list, rwd_perc_25, rwd_perc_75, alpha=0.25, linewidth=2, color='#006BB2')
-    plt.fill_between(tmps_list, rwd_perc_25_non, rwd_perc_75_non, alpha=0.25, linewidth=2, color='#B22400')
+    plt.fill_between(iter_list, rwd_perc_25, rwd_perc_75, alpha=0.25, linewidth=2, color='#006BB2')
+    plt.fill_between(iter_list, rwd_perc_25_non, rwd_perc_75_non, alpha=0.25, linewidth=2, color='#B22400')
 
-    plt.plot(tmps_list, rwd_med_list)
-    plt.plot(tmps_list, rwd_med_list_non)
+    plt.plot(iter_list, rwd_med_list)
+    plt.plot(iter_list, rwd_med_list_non)
     plt.legend(["Domain Randomization", "No Domain Randomization"])
-    plt.title("TD3 Pendulum")
-    plt.xlabel("Timesteps")
-    plt.ylabel("Median Rewards")
+    plt.title("Learning Curves (Pendulum)")
+    plt.xlabel("Iteration")
+    plt.ylabel("Expected Return")
     plt.show()
 
 else:
     # Boxplot the results using the second type of learning/testing
     plt.boxplot(reward_list)
-    plt.title("TD3 Pendulum")
+    plt.title("Boxplot (Pendulum)")
     plt.xlabel("Box No.")
-    plt.ylabel("Median Rewards")
+    plt.ylabel("Expected Return")
     plt.show()
