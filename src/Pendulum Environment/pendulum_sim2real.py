@@ -322,7 +322,7 @@ if choice == 1:
     plt.ylabel("Expected Return")
     plt.show()
 
-else:
+if choice == 2:
     # Boxplot the results using the second type of learning/testing
     plt.boxplot(reward_list)
     plt.title("Boxplot (Pendulum)")
