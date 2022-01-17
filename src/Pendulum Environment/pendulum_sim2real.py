@@ -1,12 +1,13 @@
-import csv
+# Libraries that are imported
 import gym
 from gym import spaces
 from gym.utils import seeding
-from matplotlib import pyplot as plt
 from stable_baselines3 import TD3
 from stable_baselines3.common.noise import NormalActionNoise
 from stable_baselines3.common.monitor import Monitor
+from pylab import *
 import numpy as np
+import csv
 
 
 
@@ -52,7 +53,7 @@ class PendulumEnv(gym.Env):
         reward = angle_normalize(th) ** 2 + .1 * thdot ** 2 + .001 * (u ** 2)
 
 
-        newthdot = thdot + (-3 * g / (2 * l) * np.sin(th + np.pi) + 3. / (m * l ** 2) * u) * dt
+        newthdot = thdot + (-3*g/ (2*l) * np.sin(th+np.pi) + 3./(m*l**2)*u) * dt
         newth = th + newthdot * dt
         newthdot = np.clip(newthdot, -self.max_speed, self.max_speed)
 
@@ -90,7 +91,6 @@ class PendulumEnv(gym.Env):
             self.m = self.np_random.uniform(0.70, 1.30)
             # Randomize pendulum length +-30%
             self.l = self.np_random.uniform(0.70, 1.30)
-
         else:
             # Set fixed mass, length values +30%
             self.m = 1.30
@@ -100,6 +100,7 @@ class PendulumEnv(gym.Env):
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
+
 
 
 class TestPendulumEnv(gym.Env):
@@ -146,7 +147,7 @@ class TestPendulumEnv(gym.Env):
         reward = angle_normalize(th) ** 2 + .1 * thdot ** 2 + .001 * (u ** 2)
 
 
-        newthdot = thdot + (-3 * g / (2 * l) * np.sin(th + np.pi) + 3. / (m * l ** 2) * (u - b * thdot)) * dt       # add damping to angular velocity
+        newthdot = thdot + (-3*g / (2*l) * np.sin(th+np.pi) + 3./(m*l**2) * (u-b*thdot)) * dt       # add damping to angular velocity
         newth = th + newthdot * dt
         newthdot = np.clip(newthdot, -self.max_speed, self.max_speed)
 
@@ -196,23 +197,30 @@ def load(dir):
         for row in csv_df:
             reward.append(float(row[0]))
         reward_list.append(reward)
-        print(reward_list)
+        box_reward_list.append(reward[-1])
+        print(reward)
+        print(box_reward_list)
+
+        datafile = open("./logs/Randomized/data.csv", "a")
+        for element in reward:
+            datafile.write(str(element) + "\n")
+        datafile.write("\n")
+        datafile.close()
+
 
     if dir == "./logs/NonRandomized/monitor.csv":
         for row in csv_df:
             reward_non.append(float(row[0]))
         reward_list_non.append(reward_non)
-        print(reward_list_non)
+        box_reward_list_non.append(reward_non[-1])
+        print(reward_non)
+        print(box_reward_list_non)
 
-    if dir == "./logs/Boxplot/monitor.csv":
-        for row in csv_df:
-            reward.append(float(row[0]))
-
-        # Calculate median rewards (for boxplotting)
-        reward = np.median(reward)
-
-        reward_list.append(reward)
-        print(reward_list)
+        datafile = open("./logs/NonRandomized/data.csv", "a")
+        for element in reward_non:
+            datafile.write(str(element) + "\n")
+        datafile.write("\n")
+        datafile.close()
 
 
 def perc(reward_list):
@@ -223,9 +231,10 @@ def perc(reward_list):
 
 
 
-
 reward_list = []
 reward_list_non = []
+box_reward_list = []
+box_reward_list_non = []
 
 # Run 10 times
 for i in range(10):
@@ -268,64 +277,65 @@ for i in range(10):
     non_randomized_model.learn(total_timesteps=timesteps, log_interval=500, eval_env=test_nonrand_mon, eval_freq=2000, n_eval_episodes=1, eval_log_path="./logs/NonRandomized/")
 
 
-
-    # # Instantiate the simulated environment with domain randomization
-    # randomization = True
-    # randomized_env = PendulumEnv(randomization)
-    # # Instantiate the real environment
-    # test_rand_env = TestPendulumEnv()
-    # # Monitor the real environment
-    # test_rand_mon = Monitor(test_rand_env, "./logs/Boxplot/")
-    #
-    #
-    # # The noise objects for TD3
-    # n_actions = randomized_env.action_space.shape[-1]
-    # action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
-    #
-    # model = TD3("MlpPolicy", randomized_env, action_noise=action_noise, verbose=1)
-    #
-    # timesteps = int(500000)
-    # # After 500000 steps of learning, test to the real environment (with domain randomization)
-    # model.learn(total_timesteps=timesteps, log_interval=500, eval_env=test_rand_mon, eval_freq=500000, n_eval_episodes=1, eval_log_path="./logs/Boxplot/")
-
-
     # Dataframe split to get only the important data (rewards)
-    choice = 1
     load("./logs/Randomized/monitor.csv")
     load("./logs/NonRandomized/monitor.csv")
 
-    # choice = 2
-    # load("./logs/Boxplot/monitor.csv")
 
 
+# Plot the results using learning curves
+# Compute the median and 25/75 percentiles with domain randomization
+rwd_med_list, rwd_perc_25, rwd_perc_75 = perc(reward_list)
 
-if choice == 1:
-    # Plot the results using the first type of learning/testing
-    # Compute the median and 25/75 percentiles with domain randomization
-    rwd_med_list, rwd_perc_25, rwd_perc_75 = perc(reward_list)
+# Compute the median and 25/75 percentiles without domain randomization
+rwd_med_list_non, rwd_perc_25_non, rwd_perc_75_non = perc(reward_list_non)
 
-    # Compute the median and 25/75 percentiles without domain randomization
-    rwd_med_list_non, rwd_perc_25_non, rwd_perc_75_non = perc(reward_list_non)
+# Iteration list
+iter_list = list(range(10, 2510, 10))
+
+plt.fill_between(iter_list, rwd_perc_25, rwd_perc_75, alpha=0.25, linewidth=2, color='#006BB2')
+plt.fill_between(iter_list, rwd_perc_25_non, rwd_perc_75_non, alpha=0.25, linewidth=2, color='#B22400')
+
+plt.plot(iter_list, rwd_med_list)
+plt.plot(iter_list, rwd_med_list_non)
+plt.legend(["Randomized Model", "Non Randomized Model"])
+plt.title("Learning Curves (Pendulum)")
+plt.xlabel("Iteration")
+plt.ylabel("Expected Return")
+plt.show()
 
 
-    # Iteration list
-    iter_list = list(range(10, 2510, 10))
+# Plot the results using boxplots
+fig = figure()
+ax = fig.add_subplot()
+bp = ax.boxplot([box_reward_list, box_reward_list_non])
 
-    plt.fill_between(iter_list, rwd_perc_25, rwd_perc_75, alpha=0.25, linewidth=2, color='#006BB2')
-    plt.fill_between(iter_list, rwd_perc_25_non, rwd_perc_75_non, alpha=0.25, linewidth=2, color='#B22400')
+colors = ['#43A2CA', '#FDAE6B']
+for i in range(0, len(bp['boxes'])):
+    bp['boxes'][i].set_color(colors[i])
+    bp['whiskers'][i * 2].set_color(colors[i])
+    bp['whiskers'][i * 2 + 1].set_color(colors[i])
+    bp['whiskers'][i * 2].set_linewidth(2)
+    bp['whiskers'][i * 2 + 1].set_linewidth(2)
+    bp['fliers'][i].set(markerfacecolor=colors[i], marker='o', alpha=0.75, markersize=6, markeredgecolor='none')
+    bp['medians'][i].set_color('black')
+    bp['medians'][i].set_linewidth(3)
+    for c in bp['caps']:
+        c.set_linewidth(2)
+for i in range(len(bp['boxes'])):
+    box = bp['boxes'][i]
+    box.set_linewidth(0)
+    boxX = []
+    boxY = []
+    for j in range(5):
+        boxX.append(box.get_xdata()[j])
+        boxY.append(box.get_ydata()[j])
+        boxCoords = list(zip(boxX, boxY))
+        boxPolygon = Polygon(boxCoords, facecolor=colors[i], linewidth=0)
+        ax.add_patch(boxPolygon)
 
-    plt.plot(iter_list, rwd_med_list)
-    plt.plot(iter_list, rwd_med_list_non)
-    plt.legend(["Domain Randomization", "No Domain Randomization"])
-    plt.title("Learning Curves (Pendulum)")
-    plt.xlabel("Iteration")
-    plt.ylabel("Expected Return")
-    plt.show()
-
-if choice == 2:
-    # Boxplot the results using the second type of learning/testing
-    plt.boxplot(reward_list)
-    plt.title("Boxplot (Pendulum)")
-    plt.xlabel("Box No.")
-    plt.ylabel("Expected Return")
-    plt.show()
+plt.title("Boxplots (Pendulum)")
+plt.xlabel("Boxes")
+plt.ylabel("Expected Return")
+ax.set_xticklabels(["Randomized Model", "Non Randomized Model"])
+plt.show()
