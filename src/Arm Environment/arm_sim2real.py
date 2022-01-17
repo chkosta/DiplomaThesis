@@ -1,14 +1,15 @@
-import csv
+# Libraries that are imported
 import gym
-import numpy as np
 from gym import spaces
 from gym.utils import seeding
-from matplotlib import pyplot as plt
-from scipy.spatial.distance import euclidean
 from stable_baselines3 import TD3
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.noise import NormalActionNoise
+from scipy.spatial.distance import euclidean
 import RobotDART as rd
+from pylab import *
+import numpy as np
+import csv
 
 
 
@@ -61,9 +62,7 @@ class ArmEnv(gym.Env):
         self.seed()
 
     def step(self, cmd):
-
         for i in range(20):
-
             cmd = np.clip(cmd, -self.max_torque, self.max_torque)
 
             # Set torque command
@@ -123,7 +122,6 @@ class ArmEnv(gym.Env):
             self.robot.set_body_mass("arm_link_2", mass[1])
             self.robot.set_body_mass("arm_link_3", mass[2])
             self.robot.set_body_mass("arm_link_4", mass[3])
-
         else:
             # Set fixed values +80%
             self.robot.set_body_mass("arm_link_1", 0.34)  # 0.19
@@ -184,9 +182,7 @@ class TestArmEnv(gym.Env):
         self.seed()
 
     def step(self, cmd):
-
         for i in range(20):
-
             cmd = np.clip(cmd, -self.max_torque, self.max_torque)
 
             # Set torque command
@@ -249,23 +245,30 @@ def load(dir):
         for row in csv_df:
             reward.append(float(row[0]))
         reward_list.append(reward)
-        print(reward_list)
+        box_reward_list.append(reward[-1])
+        print(reward)
+        print(box_reward_list)
+
+        datafile = open("./logs/Randomized/data.csv", "a")
+        for element in reward:
+            datafile.write(str(element) + "\n")
+        datafile.write("\n")
+        datafile.close()
+
 
     if dir == "./logs/NonRandomized/monitor.csv":
         for row in csv_df:
             reward_non.append(float(row[0]))
         reward_list_non.append(reward_non)
-        print(reward_list_non)
+        box_reward_list_non.append(reward_non[-1])
+        print(reward_non)
+        print(box_reward_list_non)
 
-    if dir == "./logs/Boxplot/monitor.csv":
-        for row in csv_df:
-            reward.append(float(row[0]))
-
-        # Calculate median rewards (for boxplotting)
-        reward = np.median(reward)
-
-        reward_list.append(reward)
-        print(reward_list)
+        datafile = open("./logs/NonRandomized/data.csv", "a")
+        for element in reward_non:
+            datafile.write(str(element) + "\n")
+        datafile.write("\n")
+        datafile.close()
 
 
 def perc(reward_list):
@@ -276,9 +279,10 @@ def perc(reward_list):
 
 
 
-
 reward_list = []
 reward_list_non = []
+box_reward_list = []
+box_reward_list_non = []
 
 # Run 10 times
 for i in range(10):
@@ -317,67 +321,69 @@ for i in range(10):
 
     non_randomized_model = TD3("MlpPolicy", non_randomized_env, action_noise=action_noise, verbose=1)
 
-    non_randomized_env.reset()
     # For every 10 episodes of learning, test to the real environment (without domain randomization)
     non_randomized_model.learn(total_timesteps=timesteps, log_interval=500, eval_env=test_nonrand_mon, eval_freq=2500, n_eval_episodes=1, eval_log_path="./logs/NonRandomized/")
 
 
-
-    # # Instantiate the simulated environment with domain randomization
-    # randomization = True
-    # randomized_env = ArmEnv(randomization)
-    # # Instantiate the real environment
-    # test_rand_env = TestArmEnv()
-    # # Monitor the real environment
-    # test_rand_mon = Monitor(test_rand_env, "./logs/Boxplot/")
-    #
-    # # The noise objects for TD3
-    # n_actions = randomized_env.action_space.shape[-1]
-    # action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
-    #
-    # model = TD3("MlpPolicy", randomized_env, action_noise=action_noise, verbose=1)
-    #
-    # timesteps = 500000
-    # randomized_env.reset()
-    # # After 500000 steps of learning, test to the real environment
-    # model.learn(total_timesteps=timesteps, log_interval=500, eval_env=test_rand_mon, eval_freq=500000, n_eval_episodes=1, eval_log_path="./logs/Boxplot/")
-
-
-    choice = 1
+    # Dataframe split to get only the important data (rewards)
     load("./logs/Randomized/monitor.csv")
     load("./logs/NonRandomized/monitor.csv")
 
-    # choice = 2
-    # load("./logs/Boxplot/monitor.csv")
 
 
+# Plot the results using learning curves
+# Compute the median and 25/75 percentiles with domain randomization
+rwd_med_list, rwd_perc_25, rwd_perc_75 = perc(reward_list)
 
-if choice == 1:
-    # Plot the results using the first type of learning/testing
-    # Compute the median and 25/75 percentiles with domain randomization
-    rwd_med_list, rwd_perc_25, rwd_perc_75 = perc(reward_list)
+# Compute the median and 25/75 percentiles without domain randomization
+rwd_med_list_non, rwd_perc_25_non, rwd_perc_75_non = perc(reward_list_non)
 
-    # Compute the median and 25/75 percentiles without domain randomization
-    rwd_med_list_non, rwd_perc_25_non, rwd_perc_75_non = perc(reward_list_non)
+# Iteration list
+iter_list = list(range(10, 2010, 10))
 
-    # Iterations list
-    iter_list = list(range(10, 2010, 10))
+plt.fill_between(iter_list, rwd_perc_25, rwd_perc_75, alpha=0.25, linewidth=2, color='#006BB2')
+plt.fill_between(iter_list, rwd_perc_25_non, rwd_perc_75_non, alpha=0.25, linewidth=2, color='#B22400')
 
-    plt.fill_between(iter_list, rwd_perc_25, rwd_perc_75, alpha=0.25, linewidth=2, color='#006BB2')
-    plt.fill_between(iter_list, rwd_perc_25_non, rwd_perc_75_non, alpha=0.25, linewidth=2, color='#B22400')
+plt.plot(iter_list, rwd_med_list)
+plt.plot(iter_list, rwd_med_list_non)
+plt.legend(["Randomized Model", "Non Randomized Model"])
+plt.title("Learning Curves (Arm)")
+plt.xlabel("Iteration")
+plt.ylabel("Expected Return")
+plt.show()
 
-    plt.plot(iter_list, rwd_med_list)
-    plt.plot(iter_list, rwd_med_list_non)
-    plt.legend(["Domain Randomization", "No Domain Randomization"])
-    plt.title("Learning Curves (Arm)")
-    plt.xlabel("Iteration")
-    plt.ylabel("Expected Return")
-    plt.show()
 
-if choice == 2:
-    # Boxplot the results using the second type of learning/testing
-    plt.boxplot(reward_list)
-    plt.title("Boxplot (Arm)")
-    plt.xlabel("Box No.")
-    plt.ylabel("Expected Return")
-    plt.show()
+# Plot the results using boxplots
+fig = figure()
+ax = fig.add_subplot()
+bp = ax.boxplot([box_reward_list, box_reward_list_non])
+
+colors = ['#43A2CA', '#FDAE6B']
+for i in range(0, len(bp['boxes'])):
+    bp['boxes'][i].set_color(colors[i])
+    bp['whiskers'][i * 2].set_color(colors[i])
+    bp['whiskers'][i * 2 + 1].set_color(colors[i])
+    bp['whiskers'][i * 2].set_linewidth(2)
+    bp['whiskers'][i * 2 + 1].set_linewidth(2)
+    bp['fliers'][i].set(markerfacecolor=colors[i], marker='o', alpha=0.75, markersize=6, markeredgecolor='none')
+    bp['medians'][i].set_color('black')
+    bp['medians'][i].set_linewidth(3)
+    for c in bp['caps']:
+        c.set_linewidth(2)
+for i in range(len(bp['boxes'])):
+    box = bp['boxes'][i]
+    box.set_linewidth(0)
+    boxX = []
+    boxY = []
+    for j in range(5):
+        boxX.append(box.get_xdata()[j])
+        boxY.append(box.get_ydata()[j])
+        boxCoords = list(zip(boxX, boxY))
+        boxPolygon = Polygon(boxCoords, facecolor=colors[i], linewidth=0)
+        ax.add_patch(boxPolygon)
+
+plt.title("Boxplots (Arm)")
+plt.xlabel("Boxes")
+plt.ylabel("Expected Return")
+ax.set_xticklabels(["Randomized Model", "Non Randomized Model"])
+plt.show()
