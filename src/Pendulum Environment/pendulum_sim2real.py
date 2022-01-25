@@ -198,8 +198,6 @@ def load(dir):
             reward.append(float(row[0]))
         reward_list.append(reward)
         box_reward_list.append(reward[-1])
-        print(reward)
-        print(box_reward_list)
 
         datafile = open("./logs/Randomized/data.csv", "a")
         for element in reward:
@@ -213,8 +211,6 @@ def load(dir):
             reward_non.append(float(row[0]))
         reward_list_non.append(reward_non)
         box_reward_list_non.append(reward_non[-1])
-        print(reward_non)
-        print(box_reward_list_non)
 
         datafile = open("./logs/NonRandomized/data.csv", "a")
         for element in reward_non:
