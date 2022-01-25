@@ -1,15 +1,15 @@
+# Libraries that are imported
 import gym
-import numpy as np
 from gym import spaces
 from gym.utils import seeding
-from matplotlib import pyplot as plt
 from stable_baselines3 import SAC
 from stable_baselines3.common.callbacks import CheckpointCallback
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.noise import NormalActionNoise
+from pylab import *
 import RobotDART as rd
 import dartpy
-import math
+import csv
 
 
 
@@ -53,8 +53,7 @@ class FrankaEnv(gym.Env):
         # Rest initialization data
         self._step = 0
 
-        # Limits
-        # End effector
+        # Limits for end effector
         self.eef_min_vel = -2.
         self.eef_max_vel = 2.
         self.finger_min_vel = -0.2
@@ -65,7 +64,7 @@ class FrankaEnv(gym.Env):
         self.eef_max_pos_y = 0.855
         self.eef_min_pos_z = 0.
         self.eef_max_pos_z = 1.190
-        # Βox
+        # Limits for box
         self.box_min_pos_x = -2.5
         self.box_max_pos_x = 2.5
         self.box_min_pos_y = -2.5
@@ -166,13 +165,6 @@ class FrankaEnv(gym.Env):
         done = False
         if self._step >= 500:
             done = True
-
-        if math.isnan(reward):
-            print("current eef pos:", current_eef_pos)
-            print("current cube pos:", current_box_pos)
-            print("velocities:", vel, fingers_vel)
-            print("cmd:", cmd)
-            exit()
 
         return self.state, reward, done, {}
 
@@ -227,8 +219,8 @@ class FrankaEnv(gym.Env):
     def randomize(self, randomization):
         if randomization:
             # Randomize franka link's masses +-15%
-            franka_mass_low = np.array([2.60, 1.99, 2.01, 2.02, 2.07, 2.97, 1.25, 0.38])
-            franka_mass_high = np.array([3.52, 2.69, 2.71, 2.74, 2.79, 4.03, 1.69, 0.52])
+            franka_mass_low = np.array([2.60, 1.99, 2.01, 2.02, 2.07, 2.97, 1.25])
+            franka_mass_high = np.array([3.52, 2.69, 2.71, 2.74, 2.79, 4.03, 1.69])
             franka_mass = self.np_random.uniform(low=franka_mass_low, high=franka_mass_high)
 
             self.robot.set_body_mass("panda_link0", franka_mass[0])
@@ -242,30 +234,26 @@ class FrankaEnv(gym.Env):
             # Randomize box mass +-15%
             box_mass = self.np_random.uniform(low=0.34, high=0.46)
             self.box.set_body_mass("box", box_mass)
-
         else:
-            # Set fixed values +10%
-            self.robot.set_body_mass("panda_link0", 3.37)   # 3.06
-            self.robot.set_body_mass("panda_link1", 2.57)   # 2.34
-            self.robot.set_body_mass("panda_link2", 2.60)   # 2.36
-            self.robot.set_body_mass("panda_link3", 2.62)   # 2.38
-            self.robot.set_body_mass("panda_link4", 2.67)   # 2.43
-            self.robot.set_body_mass("panda_link5", 3.85)   # 3.50
-            self.robot.set_body_mass("panda_link6", 1.62)   # 1.47
+            # Set fixed values +15%
+            self.robot.set_body_mass("panda_link0", 3.52)   # 3.06
+            self.robot.set_body_mass("panda_link1", 2.69)   # 2.34
+            self.robot.set_body_mass("panda_link2", 2.71)   # 2.36
+            self.robot.set_body_mass("panda_link3", 2.74)   # 2.38
+            self.robot.set_body_mass("panda_link4", 2.79)   # 2.43
+            self.robot.set_body_mass("panda_link5", 4.03)   # 3.50
+            self.robot.set_body_mass("panda_link6", 1.69)   # 1.47
 
-            self.box.set_body_mass("box", 0.44)             # 0.40
-
+            self.box.set_body_mass("box", 0.46)             # 0.40
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
-
         return [seed]
-
 
 
 class TestFrankaEnv(gym.Env):
 
-    def __init__(self, viewer, rand_value):
+    def __init__(self, viewer):
         # RobotDART initialization data
         dt = 0.001
         self.simu = rd.RobotDARTSimu(dt)
@@ -297,16 +285,12 @@ class TestFrankaEnv(gym.Env):
         # Visualization
         self.visualize(viewer)
 
-        # Randomization
-        self.randomization = rand_value
-
         # Rest initialization data
         self._step = 0
         self.rand_success_rate = []
         self.nonrand_success_rate = []
 
-        # Limits
-        # End effector
+        # Limits for end effector
         self.eef_min_vel = -2.
         self.eef_max_vel = 2.
         self.finger_min_vel = -0.2
@@ -317,7 +301,7 @@ class TestFrankaEnv(gym.Env):
         self.eef_max_pos_y = 0.855
         self.eef_min_pos_z = 0.
         self.eef_max_pos_z = 1.190
-        # Βox
+        # Limits for box
         self.box_min_pos_x = -2.5
         self.box_max_pos_x = 2.5
         self.box_min_pos_y = -2.5
@@ -416,48 +400,8 @@ class TestFrankaEnv(gym.Env):
 
         self._step += 1
         done = False
-
         if self._step >= 500:
             done = True
-
-            # Calculate success rate
-            if self.randomization is True:
-                self.success_rate = np.linalg.norm(current_box_pos-self.target_pos)*1/0.18
-                self.success_rate = 1 - self.success_rate
-                self.rand_success_rate.append(self.success_rate)
-
-            if self.randomization is False:
-                self.success_rate = np.linalg.norm(current_box_pos-self.target_pos)*1/0.18
-                self.success_rate = 1 - self.success_rate
-                self.nonrand_success_rate.append(self.success_rate)
-
-            print(self.rand_success_rate)
-            print(self.nonrand_success_rate)
-
-            # self.total_test_ep = self.total_test_ep + 1
-            #
-            # # Check if task is achieved
-            # if np.linalg.norm(current_box_pos-self.target_pos) < 0.1:
-            #     self.success = self.success + 1
-            #
-            # if self.total_test_ep % 10 == 0:
-            #     if self.randomization is True:
-            #         self.rand_success.append(self.success / 10)             # success rate is calculated for every 10 test episodes
-            #     if self.randomization is False:
-            #         self.non_rand_success.append(self.success / 10)
-            #
-            #     self.success = 0
-            #     self.total_test_ep = 0
-            #     print(self.rand_success)
-            #     print(self.non_rand_success)
-
-
-        if math.isnan(reward):
-            print("current eef pos:", current_eef_pos)
-            print("current cube pos:", current_box_pos)
-            print("velocities:", vel, fingers_vel)
-            print("cmd:", cmd)
-            exit()
 
         return self.state, reward, done, {}
 
@@ -508,7 +452,6 @@ class TestFrankaEnv(gym.Env):
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
-
         return [seed]
 
 
@@ -541,25 +484,60 @@ def damped_pseudoinverse(jac, l=0.01):
     return np.linalg.inv(jac.T @ jac + l * l * np.eye(n)) @ jac.T
 
 
-def perc(success_rates):
-    suc_med_list = np.median(success_rates, axis=0)
-    suc_perc_25 = np.percentile(success_rates, 25, axis=0)
-    suc_perc_75 = np.percentile(success_rates, 75, axis=0)
-    return suc_med_list, suc_perc_25, suc_perc_75
+def load(dir):
+    df = open(dir)
+    csv_df = csv.reader(df)
+    next(csv_df)
+    next(csv_df)
+    reward = []
+    reward_non = []
+
+    if dir == "./logs/Randomized/monitor.csv":
+        for row in csv_df:
+            reward.append(float(row[0]))
+        reward_list.append(reward)
+        box_reward_list.append(reward[-1])
+
+        datafile = open("./logs/Randomized/data.csv", "a")
+        for element in reward:
+            datafile.write(str(element) + "\n")
+        datafile.write("\n")
+        datafile.close()
+
+    if dir == "./logs/NonRandomized/monitor.csv":
+        for row in csv_df:
+            reward_non.append(float(row[0]))
+        reward_list_non.append(reward_non)
+        box_reward_list_non.append(reward_non[-1])
+
+        datafile = open("./logs/NonRandomized/data.csv", "a")
+        for element in reward_non:
+            datafile.write(str(element) + "\n")
+        datafile.write("\n")
+        datafile.close()
+
+
+def perc(reward_list):
+    rwd_med_list = np.median(reward_list, axis=0)
+    rwd_perc_25 = np.percentile(reward_list, 25, axis=0)
+    rwd_perc_75 = np.percentile(reward_list, 75, axis=0)
+    return rwd_med_list, rwd_perc_25, rwd_perc_75
 
 
 
+reward_list = []
+reward_list_non = []
+box_reward_list = []
+box_reward_list_non = []
 
-rand_success_rates_list = []
-nonrand_success_rates_list = []
-
-for i in range(1):
+# Run 5 times
+for i in range(5):
 
     # Instantiate the simulated environment with domain randomization
     viewer, randomization = False, True
     randomized_env = FrankaEnv(viewer, randomization)
     # Instantiate the real environment
-    test_rand_env = TestFrankaEnv(viewer, randomization)
+    test_rand_env = TestFrankaEnv(viewer)
     # Monitor the real environment
     test_rand_mon = Monitor(test_rand_env, "./logs/Randomized/")
 
@@ -571,9 +549,9 @@ for i in range(1):
     checkpoint_callback = CheckpointCallback(save_freq=250000, save_path="./logs/Randomized/")
     randomized_model = SAC(policy="MlpPolicy", env=randomized_env, action_noise=action_noise, verbose=1, device="cuda")
 
-    timesteps = int(4000000)
-    # For every 20 episodes of learning, test to the real environment (with domain randomization)
-    randomized_model.learn(total_timesteps=timesteps, callback=checkpoint_callback, log_interval=100, eval_env=test_rand_mon, eval_freq=10000, n_eval_episodes=1, eval_log_path="./logs/Randomized/")
+    timesteps = int(5000000)
+    # For every 40 episodes of learning, test to the real environment (with domain randomization)
+    randomized_model.learn(total_timesteps=timesteps, callback=checkpoint_callback, log_interval=100, eval_env=test_rand_mon, eval_freq=20000, n_eval_episodes=1, eval_log_path="./logs/Randomized/")
 
 
 
@@ -581,52 +559,81 @@ for i in range(1):
     viewer, randomization = False, False
     non_randomized_env = FrankaEnv(viewer, randomization)
     # Instantiate the real environment
-    test_nonrand_env = TestFrankaEnv(viewer, randomization)
+    test_nonrand_env = TestFrankaEnv(viewer)
     # Monitor the real environment
     test_nonrand_mon = Monitor(test_nonrand_env, "./logs/NonRandomized/")
+
+    # The noise objects for SAC
+    n_actions = non_randomized_env.action_space.shape[-1]
+    action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
 
     # Save a checkpoint every 250000 steps
     checkpoint_callback = CheckpointCallback(save_freq=250000, save_path="./logs/NonRandomized/")
     non_randomized_model = SAC(policy="MlpPolicy", env=non_randomized_env, action_noise=action_noise, verbose=1, device="cuda")
 
-    # For every 20 episodes of learning, test to the real environment (without domain randomization)
-    non_randomized_model.learn(total_timesteps=timesteps, callback=checkpoint_callback, log_interval=100, eval_env=test_nonrand_mon, eval_freq=10000, n_eval_episodes=1, eval_log_path="./logs/NonRandomized/")
+    # For every 40 episodes of learning, test to the real environment (without domain randomization)
+    non_randomized_model.learn(total_timesteps=timesteps, callback=checkpoint_callback, log_interval=100, eval_env=test_nonrand_mon, eval_freq=20000, n_eval_episodes=1, eval_log_path="./logs/NonRandomized/")
 
 
-    choice = 1
-    rand_success_rates_list.append(test_rand_env.rand_success_rate)
-    nonrand_success_rates_list.append(test_nonrand_env.nonrand_success_rate)
-    print(rand_success_rates_list)
-    print(nonrand_success_rates_list)
+    # Dataframe split to get only the important data (rewards)
+    load("./logs/Randomized/monitor.csv")
+    load("./logs/NonRandomized/monitor.csv")
 
 
-# Save the models
-randomized_model.save("./logs/Randomized/randomized_model")
-randomized_model.save_replay_buffer("./logs/Randomized/randomized_replay_buffer")
 
-non_randomized_model.save("./logs/NonRandomized/non_randomized_model")
-non_randomized_model.save_replay_buffer("./logs/NonRandomized/non_randomized_replay_buffer")
+# Plot the results using learning curves
+# Compute the median and 25/75 percentiles with domain randomization
+rand_med_list, rand_perc_25, rand_perc_75 = perc(reward_list)
+
+# Compute the median and 25/75 percentiles without domain randomization
+nonrand_med_list, nonrand_perc_25, nonrand_perc_75 = perc(reward_list_non)
+
+# Iteration list
+iter_list = list(range(40, 10040, 40))
+
+plt.fill_between(iter_list, rand_perc_25, rand_perc_75, alpha=0.25, linewidth=2, color='#006BB2')
+plt.fill_between(iter_list, nonrand_perc_25, nonrand_perc_75, alpha=0.25, linewidth=2, color='#B22400')
+
+plt.plot(iter_list, rand_med_list)
+plt.plot(iter_list, nonrand_med_list)
+plt.legend(["Randomized Model", "Non Randomized Model"])
+plt.title("Learning Curves (Franka Emika)")
+plt.xlabel("Iteration")
+plt.ylabel("Expected Return")
+plt.show()
 
 
-if choice == 1:
-    # Plot the learning curves
-    # Compute the median and 25/75 percentiles with domain randomization
-    suc_med_list, suc_perc_25, suc_perc_75 = perc(rand_success_rates_list)
+# Plot the results using boxplots
+fig = figure()
+ax = fig.add_subplot()
+bp = ax.boxplot([box_reward_list, box_reward_list_non])
 
-    # Compute the median and 25/75 percentiles without domain randomization
-    suc_med_list_non, suc_perc_25_non, suc_perc_75_non = perc(nonrand_success_rates_list)
+colors = ['#43A2CA', '#FDAE6B']
+for i in range(0, len(bp['boxes'])):
+    bp['boxes'][i].set_color(colors[i])
+    bp['whiskers'][i * 2].set_color(colors[i])
+    bp['whiskers'][i * 2 + 1].set_color(colors[i])
+    bp['whiskers'][i * 2].set_linewidth(2)
+    bp['whiskers'][i * 2 + 1].set_linewidth(2)
+    bp['fliers'][i].set(markerfacecolor=colors[i], marker='o', alpha=0.75, markersize=6, markeredgecolor='none')
+    bp['medians'][i].set_color('black')
+    bp['medians'][i].set_linewidth(3)
+    for c in bp['caps']:
+        c.set_linewidth(2)
+for i in range(len(bp['boxes'])):
+    box = bp['boxes'][i]
+    box.set_linewidth(0)
+    boxX = []
+    boxY = []
+    for j in range(5):
+        boxX.append(box.get_xdata()[j])
+        boxY.append(box.get_ydata()[j])
+        boxCoords = list(zip(boxX, boxY))
+        boxPolygon = Polygon(boxCoords, facecolor=colors[i], linewidth=0)
+        ax.add_patch(boxPolygon)
 
-    # Iteration list
-    iter_list = list(range(40, 8040, 40))
-
-    plt.fill_between(iter_list, suc_perc_25, suc_perc_75, alpha=0.25, linewidth=2, color='#006BB2')
-    plt.fill_between(iter_list, suc_perc_25_non, suc_perc_75_non, alpha=0.25, linewidth=2, color='#B22400')
-
-    plt.plot(iter_list, suc_med_list)
-    plt.plot(iter_list, suc_med_list_non)
-    plt.legend(["Domain Randomization", "No Domain Randomization"])
-    plt.title("Learning Curves (Franka Emika)")
-    plt.xlabel("Iteration")
-    plt.ylabel("Success Rate")
-    plt.show()
-
+plt.title("Boxplots (Franka Emika)")
+plt.xlabel("Boxes")
+plt.ylabel("Expected Return")
+ax.set_xticklabels(["Randomized Model", "Non Randomized Model"])
+plt.show()
