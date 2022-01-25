@@ -14,7 +14,8 @@ import csv
 class PendulumEnv(gym.Env):
 
     def __init__(self, rand_value, g=10.0):
-        self.max_speed = 8
+        self.max_theta = 1.
+        self.max_speed = 8.
         self.max_torque = 2.
         self.dt = .05
         self.g = g
@@ -23,23 +24,26 @@ class PendulumEnv(gym.Env):
         # Randomization
         self.randomization = rand_value
 
-        high = np.array([1., 1., self.max_speed], dtype=np.float32)
+        # Spaces
+        action_high = self.max_torque
+        obs_high = np.array([self.max_theta, self.max_theta, self.max_speed], dtype=np.float32)
+
         self.action_space = spaces.Box(
-            low=-self.max_torque,
-            high=self.max_torque,
+            low=-action_high,
+            high=action_high,
             shape=(1,),
             dtype=np.float32
         )
         self.observation_space = spaces.Box(
-            low=-high,
-            high=high,
+            low=-obs_high,
+            high=obs_high,
             dtype=np.float32
         )
 
         self.seed()
 
 
-    def step(self, u):
+    def step(self, torque):
         th, thdot = self.state  # th := theta
 
         g = self.g
@@ -47,13 +51,13 @@ class PendulumEnv(gym.Env):
         l = self.l
         dt = self.dt
 
-        u = np.clip(u, -self.max_torque, self.max_torque)[0]
+        torque = np.clip(torque, -self.max_torque, self.max_torque)[0]
 
         # Reward function
-        reward = angle_normalize(th) ** 2 + .1 * thdot ** 2 + .001 * (u ** 2)
+        reward = angle_normalize(th) ** 2 + .1 * thdot ** 2 + .001 * (torque ** 2)
 
 
-        newthdot = thdot + (-3*g/ (2*l) * np.sin(th+np.pi) + 3./(m*l**2)*u) * dt
+        newthdot = thdot + (-3*g/ (2*l) * np.sin(th+np.pi) + 3./(m*l**2)*torque) * dt
         newth = th + newthdot * dt
         newthdot = np.clip(newthdot, -self.max_speed, self.max_speed)
 
@@ -106,7 +110,8 @@ class PendulumEnv(gym.Env):
 class TestPendulumEnv(gym.Env):
 
     def __init__(self, g=10.0):
-        self.max_speed = 8
+        self.max_theta = 1.
+        self.max_speed = 8.
         self.max_torque = 2.
         self.dt = .05
         self.g = g
@@ -117,22 +122,26 @@ class TestPendulumEnv(gym.Env):
         # Damping parameter
         self.b = 0.2
 
-        high = np.array([1., 1., self.max_speed], dtype=np.float32)
+        # Spaces
+        action_high = self.max_torque
+        obs_high = np.array([self.max_theta, self.max_theta, self.max_speed], dtype=np.float32)
+
         self.action_space = spaces.Box(
-            low=-self.max_torque,
-            high=self.max_torque, shape=(1,),
+            low=-action_high,
+            high=action_high,
+            shape=(1,),
             dtype=np.float32
         )
         self.observation_space = spaces.Box(
-            low=-high,
-            high=high,
+            low=-obs_high,
+            high=obs_high,
             dtype=np.float32
         )
 
         self.seed()
 
 
-    def step(self, u):
+    def step(self, torque):
         th, thdot = self.state  # th := theta
 
         g = self.g
@@ -141,13 +150,13 @@ class TestPendulumEnv(gym.Env):
         dt = self.dt
         b = self.b
 
-        u = np.clip(u, -self.max_torque, self.max_torque)[0]
+        torque = np.clip(torque, -self.max_torque, self.max_torque)[0]
 
         # Reward function
-        reward = angle_normalize(th) ** 2 + .1 * thdot ** 2 + .001 * (u ** 2)
+        reward = angle_normalize(th) ** 2 + .1 * thdot ** 2 + .001 * (torque ** 2)
 
 
-        newthdot = thdot + (-3*g / (2*l) * np.sin(th+np.pi) + 3./(m*l**2) * (u-b*thdot)) * dt       # add damping to angular velocity
+        newthdot = thdot + (-3*g / (2*l) * np.sin(th+np.pi) + 3./(m*l**2) * (torque-b*thdot)) * dt       # add damping to angular velocity
         newth = th + newthdot * dt
         newthdot = np.clip(newthdot, -self.max_speed, self.max_speed)
 
