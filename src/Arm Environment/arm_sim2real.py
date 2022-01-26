@@ -5,7 +5,6 @@ from gym.utils import seeding
 from stable_baselines3 import TD3
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.noise import NormalActionNoise
-from scipy.spatial.distance import euclidean
 import RobotDART as rd
 from pylab import *
 import numpy as np
@@ -78,7 +77,7 @@ class ArmEnv(gym.Env):
         self.state = np.array([current_pos, current_vel])
 
         # Reward function
-        reward = -euclidean(current_pos, self.target_pos)
+        reward = -np.linalg.norm(current_pos-self.target_pos)
 
         self._step += 1
         done = False
@@ -108,14 +107,13 @@ class ArmEnv(gym.Env):
         pos[1] = self.np_random.uniform(-self.max_pos_rest, self.max_pos_rest)
         pos[2] = self.np_random.uniform(-self.max_pos_rest, self.max_pos_rest)
         pos[3] = self.np_random.uniform(-self.max_pos_rest, self.max_pos_rest)
-
         return pos
 
     def randomize(self, randomization):
         if randomization:
-            # Randomize arm link's masses +-80%
-            mass_low = np.array([0.04, 0.06, 0.04, 0.03])
-            mass_high = np.array([0.34, 0.52, 0.40, 0.29])
+            # Randomize arm link's masses in [0, 1]
+            mass_low = np.array([0., 0., 0., 0.])
+            mass_high = np.array([1., 1., 1., 1.])
             mass = self.np_random.uniform(low=mass_low, high=mass_high)
 
             self.robot.set_body_mass("arm_link_1", mass[0])
@@ -123,11 +121,11 @@ class ArmEnv(gym.Env):
             self.robot.set_body_mass("arm_link_3", mass[2])
             self.robot.set_body_mass("arm_link_4", mass[3])
         else:
-            # Set fixed values +80%
-            self.robot.set_body_mass("arm_link_1", 0.34)  # 0.19
-            self.robot.set_body_mass("arm_link_2", 0.52)  # 0.29
-            self.robot.set_body_mass("arm_link_3", 0.40)  # 0.22
-            self.robot.set_body_mass("arm_link_4", 0.29)  # 0.16
+            # Set fixed values to 2
+            self.robot.set_body_mass("arm_link_1", 2.)  # 0.19
+            self.robot.set_body_mass("arm_link_2", 2.)  # 0.29
+            self.robot.set_body_mass("arm_link_3", 2.)  # 0.22
+            self.robot.set_body_mass("arm_link_4", 2.)  # 0.16
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -198,7 +196,7 @@ class TestArmEnv(gym.Env):
         self.state = np.array([current_pos, current_vel])
 
         # Reward function
-        reward = -euclidean(current_pos, self.target_pos)
+        reward = -np.linalg.norm(current_pos-self.target_pos)
 
         self._step += 1
         done = False
@@ -225,7 +223,6 @@ class TestArmEnv(gym.Env):
         pos[1] = self.np_random.uniform(-self.max_pos_rest, self.max_pos_rest)
         pos[2] = self.np_random.uniform(-self.max_pos_rest, self.max_pos_rest)
         pos[3] = self.np_random.uniform(-self.max_pos_rest, self.max_pos_rest)
-
         return pos
 
     def seed(self, seed=None):
@@ -299,9 +296,9 @@ for i in range(10):
     n_actions = randomized_env.action_space.shape[-1]
     action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
 
-    randomized_model = TD3("MlpPolicy", randomized_env, action_noise=action_noise, verbose=1)
+    randomized_model = TD3("MlpPolicy", randomized_env, action_noise=action_noise, verbose=1, device="cuda")
 
-    timesteps = int(500000)
+    timesteps = int(625000)
     # For every 10 episodes of learning, test to the real environment (with domain randomization)
     randomized_model.learn(total_timesteps=timesteps, log_interval=500, eval_env=test_rand_mon, eval_freq=2500, n_eval_episodes=1, eval_log_path="./logs/Randomized/")
 
@@ -319,7 +316,7 @@ for i in range(10):
     n_actions = non_randomized_env.action_space.shape[-1]
     action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
 
-    non_randomized_model = TD3("MlpPolicy", non_randomized_env, action_noise=action_noise, verbose=1)
+    non_randomized_model = TD3("MlpPolicy", non_randomized_env, action_noise=action_noise, verbose=1, device="cuda")
 
     # For every 10 episodes of learning, test to the real environment (without domain randomization)
     non_randomized_model.learn(total_timesteps=timesteps, log_interval=500, eval_env=test_nonrand_mon, eval_freq=2500, n_eval_episodes=1, eval_log_path="./logs/NonRandomized/")
@@ -339,7 +336,7 @@ rwd_med_list, rwd_perc_25, rwd_perc_75 = perc(reward_list)
 rwd_med_list_non, rwd_perc_25_non, rwd_perc_75_non = perc(reward_list_non)
 
 # Iteration list
-iter_list = list(range(10, 2010, 10))
+iter_list = list(range(10, 2510, 10))
 
 plt.fill_between(iter_list, rwd_perc_25, rwd_perc_75, alpha=0.25, linewidth=2, color='#006BB2')
 plt.fill_between(iter_list, rwd_perc_25_non, rwd_perc_75_non, alpha=0.25, linewidth=2, color='#B22400')
