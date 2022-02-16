@@ -530,8 +530,8 @@ reward_list_non = []
 box_reward_list = []
 box_reward_list_non = []
 
-# Run 5 times
-for i in range(5):
+# Run 10 times
+for i in range(10):
 
     # Instantiate the simulated environment with domain randomization
     viewer, randomization = False, True
