@@ -244,7 +244,7 @@ def load(dir):
         reward_list.append(reward)
         box_reward_list.append(reward[-1])
 
-        datafile = open("./logs/Randomized/data.csv", "a")
+        datafile = open("./logs/Randomized/data_target.csv", "a")
         for element in reward:
             datafile.write(str(element) + "\n")
         datafile.write("\n")
@@ -257,7 +257,7 @@ def load(dir):
         reward_list_non.append(reward_non)
         box_reward_list_non.append(reward_non[-1])
 
-        datafile = open("./logs/NonRandomized/data.csv", "a")
+        datafile = open("./logs/NonRandomized/data_target.csv", "a")
         for element in reward_non:
             datafile.write(str(element) + "\n")
         datafile.write("\n")
