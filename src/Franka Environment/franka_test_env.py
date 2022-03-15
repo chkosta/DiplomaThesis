@@ -239,7 +239,7 @@ class FrankaEnv(gym.Env):
             self.simu.scheduler().set_sync(True)
 
             graphics.camera().record(True)
-            graphics.record_video("./videos/Source Domain/randomized_model.mp4")
+            graphics.record_video("./videos/Source Environment/randomized_model.mp4")
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -442,7 +442,7 @@ class TestFrankaEnv(gym.Env):
             self.simu.scheduler().set_sync(True)
 
             graphics.camera().record(True)
-            graphics.record_video("./videos/Target Domain/randomized_model.mp4")
+            graphics.record_video("./videos/Target Environment/randomized_model.mp4")
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
