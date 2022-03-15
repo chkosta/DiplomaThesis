@@ -135,7 +135,7 @@ class ArmEnv(gym.Env):
             self.simu.scheduler().set_sync(True)
 
             graphics.camera().record(True)
-            graphics.record_video("./videos/Source Domain/non_randomized_model.mp4")
+            graphics.record_video("./videos/Source Domain/randomized_model.mp4")
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -256,12 +256,12 @@ class TestArmEnv(gym.Env):
 
 
 # Visualization
-rand_value = False
+rand_value = True
 viewer = True
 env = ArmEnv(rand_value, viewer)
 
 # Load the trained model to the same environment
-model = TD3.load("./logs/NonRandomized/best_model.zip")
+model = TD3.load("./logs/Randomized/best_model.zip")
 
 # Run the learned policy one time to see what happens
 obs = env.reset()
